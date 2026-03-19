@@ -10,6 +10,7 @@ allowed-tools:
   - mcp__slack__slack_get_channel_history
   - Read
   - Write
+  - Bash
 ---
 
 # Context Fetcher
@@ -22,7 +23,20 @@ Step 2   [MCP]     Search GitHub repositories
 Step 3   [MCP]     Search Confluence pages
 Step 4   [MCP]     Search Slack channel
 Step 5   [Claude]  Synthesize and organize findings
-Step 6   [Claude]  Call feedback-capture skill.
+Step 6   [Claude]  Log search to MLflow (run scripts/mlflow_context.py)
+```
+
+## MLflow Tracing
+
+After synthesizing findings, you MUST log the search to MLflow:
+
+```bash
+python scripts/mlflow_context.py \
+  --query "{search keywords used}" \
+  --sources "{comma-separated: github,confluence,slack}" \
+  --job-id "{job ID if applicable}" \
+  --incident-id "{incident ID if applicable}" \
+  --results-summary "{brief summary of what was found}"
 ```
 
 ## Capabilities
@@ -81,7 +95,7 @@ Search Slack channel:
 3. **Search Confluence** for related documentation and runbooks
 4. **Search Slack** for relevant messages
 5. **Synthesize findings** into organized context
-6. **Ask for feedback**  Edit the feedback_question.txt, Call feedback-capture skill
+6. **Log trace**  run scripts/mlflow_context.py
 
 
 ### Example: Finding Job Configuration
@@ -105,9 +119,8 @@ Search Slack channel:
   - Query: `"job-name" AND messages`
   - Expected: Messages and replies
 
-   **Step 5:** Call feedback-capture skill
-  - Skill: feedback-capture skill
-  - Expected: The feedback-capture skill is called
+   **Step 5:** Run mlflow_context.py
+  - Expected: The input and output of this skill is traced
 
 ## Prerequisites
 

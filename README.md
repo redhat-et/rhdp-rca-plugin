@@ -69,10 +69,34 @@ Use this skill when you need to:
     "SPLUNK_INDEX": "<your-splunk-index>",
     "SPLUNK_OCP_APP_INDEX": "<splunk-ocp-app-index>",
     "SPLUNK_OCP_INFRA_INDEX": "<splunk-ocp-infra-index>",
-    "SPLUNK_VERIFY_SSL": "false"
+    "SPLUNK_VERIFY_SSL": "false",
+    "JUMPBOX_URI": "<username>.com@<jumpbox> -p <port>",
+    "MLFLOW_CLAUDE_TRACING_ENABLED": "true",
+    "MLFLOW_PORT":"<set localhost port>",
+    "MLFLOW_EXPERIMENT_NAME": "<experiment name or default>"
+  }
+}
+
+```
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [   
+          {
+            "type": "command",
+            "command": "./.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
+
+**Note:** Run the following to make the script executable: `chmod +x ./.claude/hooks/session-start.sh`
 
 ### context-fetcher
 
@@ -145,6 +169,117 @@ Upload the skill folder contents to a Claude project's knowledge base.
 ### Claude API
 
 Include the skill's `SKILL.md` content in your system prompt.
+
+## Creating a New Skill
+
+1. Create a directory with your skill name (lowercase, hyphen-separated)
+2. Add a `SKILL.md` file:
+
+```markdown
+---
+name: my-skill
+description: Brief description of what this skill does
+allowed-tools:
+  - Bash
+  - Read
+---
+
+# MLFlow Tracing Setup Guide for Claude Code
+
+## Step 1: Install Dependencies
+
+1. Create and activate a virtual environment:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+2. Install the package and MLFlow:
+
+```bash
+pip install -e .
+pip install mlflow
+```
+
+3. Enable MLFlow autologging for Claude:
+
+```bash
+mlflow autolog claude
+```
+
+## Step 2: Configure Claude Settings
+
+Add the following environment variables to your Claude settings file at `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "JUMPBOX_URI": "<your-username>@<your-jumpbox> -p <port>",
+    "MLFLOW_CLAUDE_TRACING_ENABLED": "true",
+    "MLFLOW_PORT":"<set localhost port>",
+    "MLFLOW_EXPERIMENT_NAME": "<experiment-name>"
+  }
+}
+```
+
+**Note**: Replace `<your-username>@<your-jumpbox> -p <port>` with your actual jumpbox connection details.
+Replace `<experiment-name>` to a experiment name to the desired experiment name. This will automatically create the experiment for you if it does not exist.
+
+## Step 3: Add hooks SessionStart to hooks in .claude/settings.json
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Make the script executable:
+```bash
+chmod +x ./.claude/hooks/session-start.sh
+```
+
+## Step 4: cd into AIOPS-SKILLS/ dir (where claude will be running)
+
+## Step 5: Enable Claude Autologging
+
+Before starting Claude, run:
+
+```bash
+mlflow autolog claude
+```
+
+## Step 6: Start Claude
+
+```bash
+claude
+```
+
+## Step 7: Run a Prompt
+
+Enter any prompt in Claude to generate a trace.
+
+## Step 8: View Traces
+  Open your browser and navigate to:                                                                                                            
+http://localhost:5000                                                                                                                                             
+  Your MLFlow dashboard will display your trace along with any previous traces.
+# My Skill
+
+Instructions for Claude...
+```
+
+See [template-skill](./template-skill/) for a minimal example and [agent_skills_spec.md](./agent_skills_spec.md) for the full specification.
 
 ## Contributing
 
