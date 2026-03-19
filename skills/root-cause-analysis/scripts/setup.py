@@ -6,8 +6,6 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .config import Config
-
 # Placeholder pattern — values that haven't been configured yet
 PLACEHOLDER_PATTERN = "<"
 

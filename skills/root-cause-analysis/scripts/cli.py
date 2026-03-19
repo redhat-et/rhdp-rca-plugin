@@ -15,7 +15,7 @@ if __name__ == "__main__" and __package__ is None:
     from scripts.correlator import build_correlation_timeline, fetch_correlated_logs
     from scripts.job_parser import parse_job_log
     from scripts.log_fetcher import fetch_job_log
-    from scripts.setup import run_checks, print_checks
+    from scripts.setup import print_checks, run_checks
     from scripts.step4_fetch_github import GitHubClient, Step4Analyzer
 else:
     # Running as module (-m scripts.cli)
@@ -23,7 +23,7 @@ else:
     from .correlator import build_correlation_timeline, fetch_correlated_logs
     from .job_parser import parse_job_log
     from .log_fetcher import fetch_job_log
-    from .setup import run_checks, print_checks
+    from .setup import print_checks, run_checks
     from .step4_fetch_github import GitHubClient, Step4Analyzer
 
 
