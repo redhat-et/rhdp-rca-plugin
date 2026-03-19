@@ -18,7 +18,8 @@
         "./skills/root-cause-analysis",
         "./skills/context-fetcher",
         "./skills/logs-fetcher",
-        "./skills/feedback-capture"
+        "./skills/feedback-capture",
+        "./skills/rca-annotator"
       ]
     }
   ]
