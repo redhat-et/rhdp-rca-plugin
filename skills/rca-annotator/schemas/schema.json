@@ -1,0 +1,42 @@
+{
+    "job_id": "1234567",
+    "annotator": "annotator_id",
+    "annotated_at": "2026-03-08T12:00:00Z",
+    "difficulty": "easy | medium | hard",
+  
+    "root_cause": {
+      "category": "platform_failure | connectivity_failure | authentication_failure | resource_failure | timeout_failure | automation_failure | infrastructure_failure | configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | secrets | unknown",
+      "summary": "One sentence describing what failed and why.",
+      "confidence": "high | medium | low"
+    },
+  
+    "evidence": [
+      {
+        "source": "aap_job | splunk_ocp | agnosticv_config | agnosticd_code",
+        "message": "The relevant log line or config snippet.",
+        "github_path": "owner/repo:path/to/file.yml:line",
+        "is_root_cause": true
+      }
+    ],
+  
+    "recommendations": [
+      {
+        "priority": "high | medium | low",
+        "action": "What should be done to fix it.",
+        "file": "path/to/file.yml"
+      }
+    ],
+  
+    "contributing_factors": [
+      "Factor that made the failure more likely or harder to diagnose."
+    ],
+  
+    "alternative_diagnoses": [
+      {
+        "category": "infrastructure",
+        "summary": "A plausible but wrong diagnosis an agent might produce.",
+        "why_wrong": "Why the evidence does not support this."
+      }
+    ]
+  }
+  
