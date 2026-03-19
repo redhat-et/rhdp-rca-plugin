@@ -39,7 +39,9 @@ def check_python_venv(base_dir: Path) -> dict:
     try:
         result = subprocess.run(
             [str(pip), "show", "requests", "python-dotenv", "PyYAML"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             return {
@@ -65,7 +67,9 @@ def check_job_logs_dir() -> dict:
             "name": "JOB_LOGS_DIR",
             "status": "missing",
             "message": "Not configured. Set in .claude/settings.json",
-            "env_vars": [{"name": "JOB_LOGS_DIR", "prompt": "Local directory path for job log files"}],
+            "env_vars": [
+                {"name": "JOB_LOGS_DIR", "prompt": "Local directory path for job log files"}
+            ],
             "configurable": True,
         }
 
@@ -75,7 +79,13 @@ def check_job_logs_dir() -> dict:
             "name": "JOB_LOGS_DIR",
             "status": "error",
             "message": f"Directory does not exist: {value}",
-            "env_vars": [{"name": "JOB_LOGS_DIR", "prompt": "Local directory path for job log files", "current": value}],
+            "env_vars": [
+                {
+                    "name": "JOB_LOGS_DIR",
+                    "prompt": "Local directory path for job log files",
+                    "current": value,
+                }
+            ],
             "configurable": True,
         }
 
@@ -158,12 +168,19 @@ def check_splunk() -> dict:
     password = os.environ.get("SPLUNK_PASSWORD", "")
     token = os.environ.get("SPLUNK_TOKEN", "")
 
-    env_vars_host = [{"name": "SPLUNK_HOST", "prompt": "Splunk API URL (e.g. https://splunk.example.com:8089)"}]
+    env_vars_host = [
+        {"name": "SPLUNK_HOST", "prompt": "Splunk API URL (e.g. https://splunk.example.com:8089)"}
+    ]
     env_vars_auth = [
         {"name": "SPLUNK_USERNAME", "prompt": "Splunk username"},
         {"name": "SPLUNK_PASSWORD", "prompt": "Splunk password"},
         {"name": "SPLUNK_INDEX", "prompt": "Splunk index name (optional)", "optional": True},
-        {"name": "SPLUNK_VERIFY_SSL", "prompt": "Verify SSL certificates (true/false)", "optional": True, "default": "false"},
+        {
+            "name": "SPLUNK_VERIFY_SSL",
+            "prompt": "Verify SSL certificates (true/false)",
+            "optional": True,
+            "default": "false",
+        },
     ]
 
     if is_placeholder(host):
@@ -203,7 +220,12 @@ def check_github() -> dict:
             "name": "GitHub token",
             "status": "missing",
             "message": "GITHUB_TOKEN not configured. Set in .claude/settings.json",
-            "env_vars": [{"name": "GITHUB_TOKEN", "prompt": "GitHub personal access token (for fetching configs)"}],
+            "env_vars": [
+                {
+                    "name": "GITHUB_TOKEN",
+                    "prompt": "GitHub personal access token (for fetching configs)",
+                }
+            ],
             "configurable": True,
         }
 
@@ -251,16 +273,31 @@ def check_mlflow() -> dict:
     issues = []
     if enabled.lower() != "true":
         issues.append("MLFLOW_CLAUDE_TRACING_ENABLED not set to 'true'")
-        env_vars.append({"name": "MLFLOW_CLAUDE_TRACING_ENABLED", "prompt": "Enable MLFlow tracing (true/false)", "default": "true"})
+        env_vars.append(
+            {
+                "name": "MLFLOW_CLAUDE_TRACING_ENABLED",
+                "prompt": "Enable MLFlow tracing (true/false)",
+                "default": "true",
+            }
+        )
     if is_placeholder(tracking_uri):
         issues.append("MLFLOW_TRACKING_URI not configured")
-        env_vars.append({"name": "MLFLOW_TRACKING_URI", "prompt": "MLFlow tracking server URL (e.g. http://127.0.0.1:5000)"})
+        env_vars.append(
+            {
+                "name": "MLFLOW_TRACKING_URI",
+                "prompt": "MLFlow tracking server URL (e.g. http://127.0.0.1:5000)",
+            }
+        )
     if is_placeholder(experiment):
         issues.append("EXPERIMENT_NAME not configured")
-        env_vars.append({"name": "MLFLOW_EXPERIMENT_NAME", "prompt": "MLFlow experiment name for tracing"})
+        env_vars.append(
+            {"name": "MLFLOW_EXPERIMENT_NAME", "prompt": "MLFlow experiment name for tracing"}
+        )
     if is_placeholder(jumpbox):
         issues.append("JUMPBOX_URI not configured")
-        env_vars.append({"name": "JUMPBOX_URI", "prompt": "SSH tunnel jumpbox (e.g. user@jumpbox-host -p port)"})
+        env_vars.append(
+            {"name": "JUMPBOX_URI", "prompt": "SSH tunnel jumpbox (e.g. user@jumpbox-host -p port)"}
+        )
 
     if issues:
         return {
@@ -283,7 +320,10 @@ def _is_server_reachable(tracking_uri: str) -> bool:
     try:
         import urllib.error
         import urllib.request
-        req = urllib.request.Request(f"{tracking_uri}/api/2.0/mlflow/experiments/search", method="GET")
+
+        req = urllib.request.Request(
+            f"{tracking_uri}/api/2.0/mlflow/experiments/search", method="GET"
+        )
         resp = urllib.request.urlopen(req, timeout=5)
         body = resp.read().decode("utf-8", errors="replace")
         return "mlflow" in body.lower() or "experiments" in body.lower()
@@ -302,6 +342,7 @@ def _parse_uri_port(tracking_uri: str) -> str | None:
     """Extract port from a tracking URI like http://127.0.0.1:5000."""
     try:
         from urllib.parse import urlparse
+
         parsed = urlparse(tracking_uri)
         return str(parsed.port) if parsed.port else None
     except Exception:
@@ -313,7 +354,9 @@ def _tunnel_already_running(port: str) -> bool:
     try:
         result = subprocess.run(
             ["pgrep", "-f", f"ssh.*-L.*{port}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return result.returncode == 0
     except Exception:
@@ -335,7 +378,11 @@ def _start_ssh_tunnel(tracking_uri: str, jumpbox_uri: str) -> dict:
     try:
         cmd = f"ssh -f -N -L {port}:127.0.0.1:{port} {jumpbox_uri}"
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True, timeout=15,
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         if result.returncode != 0:
             return {"started": False, "message": f"SSH tunnel failed: {result.stderr.strip()}"}
@@ -351,9 +398,12 @@ def _kill_stale_tunnel(port: str) -> None:
     try:
         subprocess.run(
             ["pkill", "-f", f"ssh.*-L.*{port}"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         import time
+
         time.sleep(1)
     except Exception:
         pass
@@ -392,6 +442,7 @@ def check_mlflow_server() -> dict:
 
         if tunnel_result["started"]:
             import time
+
             time.sleep(2)
             reachable = _is_server_reachable(tracking_uri)
 
@@ -427,7 +478,11 @@ def check_session_hook(repo_root: Path) -> dict:
                 settings = json.load(f)
             hooks = settings.get("hooks", {})
             if "SessionStart" in hooks:
-                return {"name": "Session hook", "status": "ok", "message": "registered in settings.json"}
+                return {
+                    "name": "Session hook",
+                    "status": "ok",
+                    "message": "registered in settings.json",
+                }
         except (json.JSONDecodeError, OSError):
             pass
 
@@ -439,7 +494,11 @@ def check_session_hook(repo_root: Path) -> dict:
                 settings = json.load(f)
             hooks = settings.get("hooks", {})
             if "SessionStart" in hooks:
-                return {"name": "Session hook", "status": "ok", "message": "registered in settings.local.json"}
+                return {
+                    "name": "Session hook",
+                    "status": "ok",
+                    "message": "registered in settings.local.json",
+                }
         except (json.JSONDecodeError, OSError):
             pass
 

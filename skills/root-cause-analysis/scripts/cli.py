@@ -162,7 +162,13 @@ def cmd_analyze(args: argparse.Namespace, config: Config) -> int:
     print("\n[Step 2] Fetching Splunk logs...")
     if skip_splunk:
         print("  Skipped: Splunk not configured")
-        splunk_logs = {"ocp_logs": [], "error_logs": [], "pods_found": [], "skipped": True, "reason": "Splunk not configured"}
+        splunk_logs = {
+            "ocp_logs": [],
+            "error_logs": [],
+            "pods_found": [],
+            "skipped": True,
+            "reason": "Splunk not configured",
+        }
         save_step(analysis_dir, 2, splunk_logs)
     else:
         try:
@@ -398,9 +404,7 @@ def main():
 
     # setup command
     setup_parser = subparsers.add_parser("setup", help="Check prerequisites and configuration")
-    setup_parser.add_argument(
-        "--json", action="store_true", help="Output results as JSON"
-    )
+    setup_parser.add_argument("--json", action="store_true", help="Output results as JSON")
 
     # status command
     status_parser = subparsers.add_parser("status", help="Show analysis status")
