@@ -1,42 +1,96 @@
 {
-    "job_id": "1234567",
-    "annotator": "annotator_id",
-    "annotated_at": "2026-03-08T12:00:00Z",
-    "difficulty": "easy | medium | hard",
-  
-    "root_cause": {
-      "category": "platform_failure | connectivity_failure | authentication_failure | resource_failure | timeout_failure | automation_failure | infrastructure_failure | configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | secrets | unknown",
-      "summary": "One sentence describing what failed and why.",
-      "confidence": "high | medium | low"
-    },
-  
-    "evidence": [
+  "job_id": "1234567",
+  "annotator": "claude_judge",
+  "annotated_at": "2026-03-08T12:00:00Z",
+  "difficulty": "easy | medium | hard",
+  "difficulty_score": 5,
+  "difficulty_justification": "Requires correlating task code (+2) with missing configs (+0) and interpreting generic MODULE FAILURE (+2) and understanding default(omit) behavior (+1). Total: 5 points.",
+
+  "root_cause": {
+    "category": "configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | credential | secrets | unknown",
+    "summary": "One sentence describing what failed and why.",
+    "confidence": "high | medium | low"
+  },
+
+  "evidence": [
+    {
+      "source": "step1 | step3 | step4 | aap_job | splunk_ocp | agnosticv_config | agnosticd_code",
+      "source_file": ".analysis/1234567/step1_job_context.json",
+      "json_path": "failed_tasks[0].duration",
+      "exact_value": 917.565567,
+      "exact_quote": "kubeconfig: \"{{ _bookbag_kubeconfig | default(omit) }}\"",
+      "line_number": 5,
+      "github_path": "owner/repo:path/to/file.yml:line",
+      "message": "The relevant log line or config snippet.",
+      "confidence": "high | medium | low",
+      "is_root_cause": true
+    }
+  ],
+
+  "recommendations": [
+    {
+      "priority": "high | medium | low",
+      "action": "What should be done to fix it.",
+      "file": "path/to/file.yml"
+    }
+  ],
+
+  "contributing_factors": [
+    "Factor that made the failure more likely or harder to diagnose."
+  ],
+
+  "alternative_diagnoses": [
+    {
+      "category": "infrastructure",
+      "summary": "A plausible but wrong diagnosis an agent might produce.",
+      "why_wrong": "Why the evidence does not support this.",
+      "plausibility": "high | medium | low",
+      "supporting_evidence": [
+        "Evidence that could support this diagnosis",
+        "Another piece of supporting evidence"
+      ],
+      "contradicting_evidence": [
+        "Evidence that contradicts this diagnosis",
+        "Another contradicting factor"
+      ]
+    }
+  ],
+
+  "consistency_check": {
+    "num_passes": 3,
+    "agreement": {
+      "category_agreement": "full | partial | none",
+      "category_votes": {"credential": 3, "infrastructure": 0},
+      "evidence_overlap": 0.85,
+      "confidence_distribution": {"high": 2, "medium": 1, "low": 0},
+      "confidence_mode": "high"
+    }
+  },
+
+  "step5_comparison": {
+    "compared_at": "2026-03-08T12:01:00Z",
+    "category_match": true,
+    "confidence_match": false,
+    "root_cause_agreement": "full | partial | none",
+    "discrepancies": [
       {
-        "source": "aap_job | splunk_ocp | agnosticv_config | agnosticd_code",
-        "message": "The relevant log line or config snippet.",
-        "github_path": "owner/repo:path/to/file.yml:line",
-        "is_root_cause": true
+        "field": "root_cause.confidence",
+        "judge_value": "medium",
+        "step5_value": "high",
+        "reasoning": "Why the values differ based on raw evidence from steps 1-4."
       }
     ],
-  
-    "recommendations": [
-      {
-        "priority": "high | medium | low",
-        "action": "What should be done to fix it.",
-        "file": "path/to/file.yml"
-      }
+    "missed_by_judge": [
+      "Evidence or insight that step 5 found but the judge did not."
     ],
-  
-    "contributing_factors": [
-      "Factor that made the failure more likely or harder to diagnose."
+    "missed_by_step5": [
+      "Evidence or insight that the judge found but step 5 did not."
     ],
-  
-    "alternative_diagnoses": [
-      {
-        "category": "infrastructure",
-        "summary": "A plausible but wrong diagnosis an agent might produce.",
-        "why_wrong": "Why the evidence does not support this."
-      }
-    ]
+    "quality_score": {
+      "diagnosis_accuracy": "correct | partial | incorrect",
+      "evidence_completeness": "complete | partial | incomplete",
+      "recommendation_quality": "good | adequate | poor",
+      "overall": "A | B | C | D | F"
+    }
   }
-  
+}

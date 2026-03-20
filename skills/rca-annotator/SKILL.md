@@ -1,15 +1,21 @@
 ---
 name: rca-annotator
-description: Two-pass annotation of root-cause-analysis outputs. Pass 1 acts as an independent judge LLM assessing steps 1-4 to produce unbiased ground-truth labels. Pass 2 compares the independent annotation against step 5 to evaluate model diagnosis quality.
+description: Two-pass annotation with multi-pass consistency checks, difficulty calibration rubric, and complete evidence traceability for accurate ground-truth labels of root-cause-analysis outputs.
 allowed-tools:
   - Read
   - Write
   - Bash
 ---
 
-# RCA Annotator
+# RCA Annotator (Enhanced)
 
-Create ground-truth annotations for root-cause-analysis outputs to enable model evaluation and improvement. This skill uses a two-pass approach: first acting as an independent judge LLM analyzing steps 1-4 outputs to produce unbiased diagnostic labels, then comparing the independent annotation against step 5 to evaluate model diagnosis quality.
+Create high-accuracy ground-truth annotations for root-cause-analysis outputs with multi-pass consistency validation and complete traceability. This skill uses a two-pass approach with optional consistency checks to ensure reliable diagnostic labels for model evaluation.
+
+## Enhancements (v2)
+
+1. **Multi-Pass Consistency Checks** - Optional validation across multiple independent runs
+2. **Difficulty Calibration Rubric** - Objective 0-10 scoring system
+3. **Evidence Traceability Matrix** - Exact JSON paths, line numbers, and quotes
 
 ## When to Use This Skill
 
@@ -45,18 +51,19 @@ If `step5_analysis_summary.json` is missing, Pass 2 (Step 3) will be skipped.
 
 ## How It Works
 
-**Two-Pass Approach**: Pass 1 acts as an independent judge reading only steps 1-4 (NOT step 5) to produce unbiased ground-truth labels. Pass 2 then compares the independent annotation against step 5 to evaluate model diagnosis quality. The independent annotation is finalized and written to disk before step 5 is ever read.
+**Two-Pass Approach with Optional Consistency Validation**: Pass 1 acts as an independent judge reading only steps 1-4 (NOT step 5) to produce unbiased ground-truth labels. Optionally run 2-3 independent passes to validate consistency. Pass 2 then compares the independent annotation against step 5 to evaluate model diagnosis quality.
 
 **Workflow**:
 1. Validate `.analysis/<job_id>/` directory exists with required files
 2. Read step1, step3, step4 outputs (DO NOT read step5 yet)
-3. Perform independent analysis following structured patterns
-4. Generate annotation with root cause, evidence, difficulty, recommendations, and alternatives
-5. **Write** `annotation_draft.json` to disk — independent annotation is now final
-6. **If `step5_analysis_summary.json` exists**: Read step 5 and compare against independent annotation
-7. Append `step5_comparison` block to `annotation_draft.json` and save
+3. Perform independent analysis with enhanced evidence scoring
+4. **OPTIONAL**: Run multi-pass consistency check
+5. Generate annotation with root cause, evidence (with strength/confidence), difficulty score, recommendations, and alternatives
+6. **Write** `annotation_draft.json` to disk — independent annotation is now final
+7. **If `step5_analysis_summary.json` exists**: Read step 5 and compare against independent annotation
+8. Append `step5_comparison` block to `annotation_draft.json` and save
 
-**CRITICAL**: Complete and write all independent annotation fields (steps 1-5) to disk BEFORE reading step 5. Do NOT revise any independent fields after reading step 5. The comparison is additive, not corrective.
+**CRITICAL**: Complete and write all independent annotation fields to disk BEFORE reading step 5. Do NOT revise any independent fields after reading step 5. The comparison is additive, not corrective.
 
 ---
 
@@ -81,14 +88,14 @@ echo "All required files present" || echo "ERROR: Missing required files"
 
 ### Reading Order (Pass 1 Only)
 
-**CRITICAL**: Read files in this specific order. Do NOT read step5 until Step 3 (Pass 2):
+**CRITICAL**: Read files in this specific order. Do NOT read step5 until Step 4 (Pass 2):
 
 1. **Read step1_job_context.json** - Understand job metadata, failed tasks, error messages
 2. **Read step3_correlation.json** - Get correlated timeline (this includes relevant Splunk context)
 3. **Read step4_github_fetch_history.json** - Review configuration hierarchy and code
 
 **DO NOT READ YET**:
-- `step5_analysis_summary.json` - Deferred to Step 3 (Pass 2), after independent annotation is written to disk
+- `step5_analysis_summary.json` - Deferred to Step 4 (Pass 2), after independent annotation is written to disk
 - `step2_splunk_logs.json` - Step3 already includes relevant correlated events
 
 ---
@@ -130,93 +137,182 @@ Analyze the evidence to determine the primary failure category:
 - `network` - Connection failures, timeouts, DNS issues
 - `resource` - OOM, CPU limits, quota exceeded, disk full
 - `cloud_api` - AWS/Azure/GCP API errors, rate limits, permissions
+- `credential` - Missing credentials, undefined variables, invalid authentication
 - `secrets` - Missing credentials, incorrect keys, vault access issues
 - `unknown` - Insufficient evidence to determine root cause
 
-### B. Evidence Construction
+### B. Evidence Construction with Traceability
 
-Build an evidence list that supports the root cause diagnosis. Mark the item that identifies the root cause with `is_root_cause: true`.
+Build an evidence list with complete traceability to source files.
 
-**Step-by-Step Process**:
+**Evidence Traceability Requirements**:
+1. **Source file reference** - Which analysis file (step1/step3/step4)
+2. **JSON path** - Exact path to the evidence in the source file
+3. **Exact value/quote** - The literal value or error message
+4. **Confidence level** - high/medium/low assessment of evidence quality
 
-1. **Start with Step3 Timeline** - Events are already in chronological order
-2. **Filter to Critical Events** - Focus on `task_failed` and `pod_error` types
-3. **Identify Root Cause Evidence** - The item that pinpoints the underlying issue (`is_root_cause: true`)
-4. **Link to GitHub Context** - Include `github_path` for config/code sources from step4
-5. **Include Supporting Evidence** - Additional items that corroborate or show propagation
+**Traceability Matrix Format**:
 
-**GitHub Path Extraction**:
-
-For `agnosticv_config` sources:
-```
-From step4.github_fetches[0].fetched_configs.env_overrides:
-  path: "openshift/cnv/staging.yaml"
-  owner: "rhpds"
-  repo: "agnosticv"
-→ github_path: "rhpds/agnosticv:openshift/cnv/staging.yaml"
-```
-
-For `agnosticd_code` sources:
-```
-From step4.github_fetches[0].location.parsed:
-  owner: "redhat-cop"
-  repo: "agnosticd"
-  file_path: "roles/example-role/tasks/main.yml"
-  line_number: 42
-→ github_path: "redhat-cop/agnosticd:roles/example-role/tasks/main.yml:42"
-```
-
-**Evidence Example** (Configuration Error):
-```json
-[
-  {
-    "source": "agnosticv_config",
-    "message": "Variable 'database_password' undefined in env overrides",
-    "github_path": "rhpds/agnosticv:openshift/cnv/staging.yaml",
-    "is_root_cause": true
-  },
-  {
-    "source": "aap_job",
-    "message": "Task 'Deploy Database' failed: 'database_password' is undefined"
-  },
-  {
-    "source": "splunk_ocp",
-    "message": "Pod 'db-pod-123' CrashLoopBackOff: authentication failed"
-  }
-]
-```
-
-### C. Difficulty Rating
-
-Assess how hard this issue would be for a human expert to diagnose. Use one of three levels:
-
-- **easy**: Diagnosable from `step1_job_context.json` alone. Error message directly names the issue, single failed task with clear error (e.g., "'aws_key' is undefined", RBAC permission denied).
-- **medium**: Requires correlating AAP failure with Splunk pod errors or GitHub config. Multiple sources needed to identify root cause (e.g., AAP + Splunk timeline, or AAP + GitHub config hierarchy).
-- **hard**: Requires understanding operator lifecycle, config override precedence, or cross-role interactions. Subtle timing dependencies, multiple interacting failures, or deep domain expertise needed.
-
-### D. Alternative Diagnoses (Red Herrings)
-
-Identify plausible-but-incorrect hypotheses that could mislead diagnosis:
-
-**Common Red Herrings**:
-- **Pod restarts after failure**: These are effects, not causes (pod crashed because task failed, not vice versa)
-- **Generic "Task failed"**: Symptom without identifying the underlying cause
-- **Timing coincidences**: Events close in time but not causally related
-- **Infrastructure events unrelated to job**: Pre-existing pod errors in same namespace
-- **Correct configuration misidentified**: Assuming config is wrong when code has the bug
-
-**Example**:
 ```json
 {
-  "category": "infrastructure",
-  "summary": "Pod infrastructure failure caused job to fail",
-  "why_wrong": "Pod crashed AFTER task failed due to authentication error from missing secret variable. The pod failure is a symptom, not the root cause."
+  "source": "step1",
+  "source_file": ".analysis/2035512/step1_job_context.json",
+  "json_path": "failed_tasks[0].duration",
+  "exact_value": 917.565567,
+  "message": "Task duration of 917.565567 seconds indicates timeout, not immediate failure",
+  "confidence": "medium",
+  "is_root_cause": false
 }
 ```
 
+**For agnosticd_code sources**, also include:
+```json
+{
+  "source": "agnosticd_code",
+  "source_file": ".analysis/2035512/step4_github_fetch_history.json",
+  "json_path": "github_fetches[0].fetched_workload.failed_task_code.content",
+  "line_number": 5,
+  "exact_quote": "kubeconfig: \"{{ _bookbag_kubeconfig | default(omit) }}\"",
+  "github_path": "redhat-cop/agnosticd:ansible/roles/bookbag/tasks/remove_workload.yaml:5",
+  "message": "Conditional kubeconfig usage - when undefined, parameter omitted",
+  "confidence": "high",
+  "is_root_cause": true
+}
+```
+
+**For agnosticv_config sources**:
+```json
+{
+  "source": "agnosticv_config",
+  "source_file": ".analysis/2035512/step4_github_fetch_history.json",
+  "json_path": "fetched_configs.env_overrides.paths_tried[0]",
+  "exact_value": {"path": "tests/babylon-empty-config/prod.yaml", "status": "404"},
+  "github_path": "rhpds/agnosticv:tests/babylon-empty-config/prod.yaml",
+  "message": "Configuration file returned 404 - variable cannot be defined",
+  "confidence": "high",
+  "is_root_cause": false
+}
+```
+
+**Step-by-Step Process**:
+1. **Start with Step3 Timeline** - Events are already in chronological order
+2. **Filter to Critical Events** - Focus on `task_failed` and `pod_error` types
+3. **Identify Root Cause Evidence** - The item that pinpoints the underlying issue (`is_root_cause: true`)
+4. **Extract Traceability Data** - JSON path, exact values, line numbers
+5. **Assign Confidence Level** - high/medium/low based on evidence quality
+6. **Include Supporting Evidence** - Additional items that corroborate
+
+**Mark exactly ONE evidence item with `is_root_cause: true`** - this should be the most direct evidence pointing to the underlying cause.
+
+### C. Difficulty Calibration with Scoring Rubric
+
+Calculate an objective difficulty score (0-10) based on analysis complexity:
+
+**Scoring Criteria**:
+- **+3**: Requires correlation across multiple sources (AAP + Splunk + GitHub)
+- **+2**: Requires understanding code behavior (not just config values)
+- **+2**: Error message is generic/misleading (not directly diagnostic)
+- **+1**: Requires understanding variable precedence or override hierarchy
+- **+1**: Requires domain knowledge (Kubernetes, Ansible, cloud APIs)
+- **+1**: Multiple plausible alternative diagnoses exist
+- **+1**: Timing dependencies or causal ordering critical to diagnosis
+
+**Difficulty Mapping**:
+- **0-3**: easy
+- **4-6**: medium
+- **7-10**: hard
+
+**Include both score and justification**:
+```json
+{
+  "difficulty": "medium",
+  "difficulty_score": 5,
+  "difficulty_justification": "Requires correlating task code (+2) with missing configs (+0) and interpreting generic MODULE FAILURE (+2) and understanding default(omit) behavior (+1)"
+}
+```
+
+### D. Alternative Diagnoses (Red Herrings)
+
+Identify plausible-but-incorrect hypotheses with plausibility scoring:
+
+**Enhanced Format**:
+```json
+{
+  "category": "infrastructure",
+  "summary": "OpenShift cluster is unavailable or unreachable, causing k8s_info to fail",
+  "why_wrong": "The long timeout duration (917s) and MODULE FAILURE error are consistent with authentication retry/timeout, not network unavailability which would fail faster.",
+  "plausibility": "medium",
+  "supporting_evidence": ["long timeout", "destroy action", "no namespace"],
+  "contradicting_evidence": ["test environment", "no cluster infrastructure", "auth retry pattern"]
+}
+```
+
+**Plausibility Level**:
+- **high**: Very plausible - shares multiple characteristics with correct diagnosis
+- **medium**: Moderately plausible - some evidence supports it
+- **low**: Weakly plausible - superficial similarity or clearly contradicted by evidence
+
 ---
 
-## Step 3: Compare with Step 5 (Pass 2)
+## Step 2b: Multi-Pass Consistency Check (Optional)
+
+**When to use**: For high-stakes annotations or when initial confidence is medium/low.
+
+Run 2-3 independent annotation passes and check consistency:
+
+```bash
+# Run annotation 3 times (pseudocode - manual process)
+# Pass 1: Already completed in Step 2
+# Pass 2: Repeat Step 2 with fresh perspective
+# Pass 3: Repeat Step 2 with fresh perspective
+```
+
+**Consistency Validation**:
+
+```json
+{
+  "consistency_check": {
+    "num_passes": 3,
+    "agreement": {
+      "category_agreement": "full",
+      "category_votes": {"credential": 3, "infrastructure": 0, "configuration": 0},
+      "evidence_overlap": 0.85,
+      "confidence_distribution": {"high": 3, "medium": 0, "low": 0},
+      "confidence_mode": "high"
+    },
+    "consensus_root_cause": {
+      "category": "credential",
+      "confidence": "high"
+    },
+    "discrepancies": []
+  }
+}
+```
+
+**Consistency Rules**:
+- If all 3 agree on category → use consensus, confidence: high
+- If 2/3 agree → use majority, confidence: medium, note discrepancy
+- If all differ → confidence: low, flag for human review, include all alternatives
+
+**When to skip**: If initial confidence is already high and difficulty is easy, consistency check may be unnecessary.
+
+---
+
+## Step 3: Finalize and Write Independent Annotation
+
+**Before writing**, verify:
+- [ ] All evidence has traceability fields (source_file, json_path, exact_value/quote)
+- [ ] All evidence has strength (direct/inferential/circumstantial)
+- [ ] All evidence has confidence score (0.0-1.0)
+- [ ] Exactly one evidence item has `is_root_cause: true`
+- [ ] Difficulty score calculated with justification
+- [ ] Alternative diagnoses have plausibility levels
+
+Write `annotation_draft.json` to disk with complete schema (see Output Format below).
+
+---
+
+## Step 4: Compare with Step 5 (Pass 2)
 
 **CRITICAL**: Only proceed to this step AFTER `annotation_draft.json` has been written to disk with all independent fields finalized. Do NOT revise any independent fields based on what you read here.
 
@@ -279,21 +375,29 @@ Save annotation to `.analysis/<job_id>/annotation_draft.json` following this sch
 ```json
 {
   "job_id": "1234567",
-  "annotator": "annotator_id",
-  "annotated_at": "2026-03-08T12:00:00Z",
+  "annotator": "claude_judge",
+  "annotated_at": "2026-03-19T12:00:00Z",
   "difficulty": "easy | medium | hard",
+  "difficulty_score": 5,
+  "difficulty_justification": "Requires correlating task code (+2) with missing configs...",
 
   "root_cause": {
-    "category": "configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | secrets | unknown",
+    "category": "configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | credential | secrets | unknown",
     "summary": "One sentence describing what failed and why.",
     "confidence": "high | medium | low"
   },
 
   "evidence": [
     {
-      "source": "aap_job | splunk_ocp | agnosticv_config | agnosticd_code",
-      "message": "The relevant log line or config snippet.",
+      "source": "step1 | step3 | step4",
+      "source_file": ".analysis/2035512/step1_job_context.json",
+      "json_path": "failed_tasks[0].duration",
+      "exact_value": 917.565567,
+      "exact_quote": "kubeconfig: \"{{ _bookbag_kubeconfig | default(omit) }}\"",
+      "line_number": 5,
       "github_path": "owner/repo:path/to/file.yml:line",
+      "message": "The relevant log line or config snippet.",
+      "confidence": "high | medium | low",
       "is_root_cause": true
     }
   ],
@@ -314,29 +418,32 @@ Save annotation to `.analysis/<job_id>/annotation_draft.json` following this sch
     {
       "category": "infrastructure",
       "summary": "A plausible but wrong diagnosis an agent might produce.",
-      "why_wrong": "Why the evidence does not support this."
+      "why_wrong": "Why the evidence does not support this.",
+      "plausibility": "medium",
+      "supporting_evidence": ["long timeout", "destroy action"],
+      "contradicting_evidence": ["test environment", "auth retry pattern"]
     }
   ],
 
+  "consistency_check": {
+    "num_passes": 3,
+    "agreement": {
+      "category_agreement": "full | partial | none",
+      "category_votes": {"credential": 3},
+      "evidence_overlap": 0.85,
+      "confidence_distribution": {"high": 2, "medium": 1, "low": 0},
+      "confidence_mode": "high"
+    }
+  },
+
   "step5_comparison": {
-    "compared_at": "2026-03-08T12:01:00Z",
+    "compared_at": "2026-03-19T12:01:00Z",
     "category_match": true,
     "confidence_match": false,
     "root_cause_agreement": "full | partial | none",
-    "discrepancies": [
-      {
-        "field": "root_cause.confidence",
-        "judge_value": "medium",
-        "step5_value": "high",
-        "reasoning": "Why the values differ based on raw evidence from steps 1-4."
-      }
-    ],
-    "missed_by_judge": [
-      "Evidence or insight that step 5 found but the judge did not."
-    ],
-    "missed_by_step5": [
-      "Evidence or insight that the judge found but step 5 did not."
-    ],
+    "discrepancies": [],
+    "missed_by_judge": [],
+    "missed_by_step5": [],
     "quality_score": {
       "diagnosis_accuracy": "correct | partial | incorrect",
       "evidence_completeness": "complete | partial | incomplete",
@@ -347,250 +454,20 @@ Save annotation to `.analysis/<job_id>/annotation_draft.json` following this sch
 }
 ```
 
-**Fields (Pass 1 — Independent Annotation)**:
-- `job_id` - Job being annotated
-- `annotated_at` - Current timestamp (ISO 8601)
-- `annotator` - Set to "claude_judge"
-- `difficulty` - One of: `easy`, `medium`, `hard`
-- `root_cause` - Category, summary, confidence
-- `evidence` - Evidence items with source, message, optional `github_path` and `is_root_cause` flag
-- `recommendations` - Actionable fixes with priority, action, and file path
-- `contributing_factors` - Factors that made the failure more likely or harder to diagnose
-- `alternative_diagnoses` - At least 1-2 plausible-but-incorrect hypotheses
-
-**Fields (Pass 2 — Step 5 Comparison, optional)**:
-- `step5_comparison` - Present only when `step5_analysis_summary.json` exists. Added AFTER all independent fields are finalized
-- `step5_comparison.compared_at` - Timestamp when comparison was performed
-- `step5_comparison.category_match` - Whether root cause categories agree
-- `step5_comparison.confidence_match` - Whether confidence levels agree
-- `step5_comparison.root_cause_agreement` - `full`, `partial`, or `none`
-- `step5_comparison.discrepancies[]` - Field-level differences with reasoning
-- `step5_comparison.missed_by_judge[]` - Evidence step 5 found that the judge missed
-- `step5_comparison.missed_by_step5[]` - Evidence the judge found that step 5 missed
-- `step5_comparison.quality_score` - Accuracy, completeness, recommendation quality, overall grade
-
----
-
-## Labeling Guidelines
-
-### Category Selection
-
-Choose the **primary** root cause, even if multiple factors contributed:
-- If a missing variable caused a task to fail → `configuration` (not `application_bug`)
-- If incorrect RBAC prevented pod creation → `infrastructure` (not `configuration`)
-- If a code bug only manifests with certain config → `application_bug` (config is trigger, not cause)
-
-### Evidence Extraction
-
-Every piece of evidence must:
-- Come directly from step1/step3/step4 outputs (no inference)
-- Quote actual error messages (don't paraphrase)
-- Include `github_path` when source is `agnosticv_config` or `agnosticd_code`
-- Set `is_root_cause: true` on exactly one item that identifies the underlying cause
-
-### Confidence Levels
-
-- **High**: Clear error messages, direct evidence, single failure mode
-- **Medium**: Requires correlation, some ambiguity, multiple possible causes
-- **Low**: Insufficient data, missing logs, unclear timeline
-
----
-
-## Examples
-
-### Example 1: Configuration Error (Missing Variable)
-
-**Scenario**: Task fails due to undefined variable in AgnosticV config. Step 5 exists and correctly identified the root cause but missed a contributing factor.
-
-**Annotation Output**:
-```json
-{
-  "job_id": "1234567",
-  "annotated_at": "2025-01-15T10:45:00Z",
-  "annotator": "claude_judge",
-  "difficulty": "easy",
-  "root_cause": {
-    "category": "configuration",
-    "summary": "Missing 'aws_access_key_id' variable in staging environment config",
-    "confidence": "high"
-  },
-  "evidence": [
-    {
-      "source": "agnosticv_config",
-      "message": "Variable 'aws_access_key_id' not defined in openshift/cnv/staging.yaml",
-      "github_path": "rhpds/agnosticv:openshift/cnv/staging.yaml",
-      "is_root_cause": true
-    },
-    {
-      "source": "aap_job",
-      "message": "TASK [setup-aws : Configure AWS credentials] failed: 'aws_access_key_id' is undefined"
-    },
-    {
-      "source": "splunk_ocp",
-      "message": "Pod aws-setup-pod CrashLoopBackOff: container exited with code 1"
-    }
-  ],
-  "recommendations": [
-    {
-      "priority": "high",
-      "action": "Add aws_access_key_id variable to staging environment config",
-      "file": "openshift/cnv/staging.yaml"
-    }
-  ],
-  "contributing_factors": [
-    "Variable not defined at any level of the AgnosticV config hierarchy"
-  ],
-  "alternative_diagnoses": [
-    {
-      "category": "secrets",
-      "summary": "AWS credentials are invalid or expired",
-      "why_wrong": "Error message states variable is 'undefined', not invalid. The variable doesn't exist in config, not that credentials are wrong."
-    }
-  ],
-  "step5_comparison": {
-    "compared_at": "2025-01-15T10:46:00Z",
-    "category_match": true,
-    "confidence_match": true,
-    "root_cause_agreement": "full",
-    "discrepancies": [],
-    "missed_by_judge": [],
-    "missed_by_step5": [
-      "Step 5 did not note that the variable is missing at every level of the AgnosticV config hierarchy, not just the staging override."
-    ],
-    "quality_score": {
-      "diagnosis_accuracy": "correct",
-      "evidence_completeness": "partial",
-      "recommendation_quality": "good",
-      "overall": "A"
-    }
-  }
-}
-```
-
-### Example 2: Infrastructure Failure (Pod Eviction)
-
-**Scenario**: Node pressure causes pod eviction before job completes. Step 5 exists but misdiagnosed the root cause as a network issue.
-
-**Annotation Output**:
-```json
-{
-  "job_id": "7654321",
-  "annotated_at": "2025-01-15T11:00:00Z",
-  "annotator": "claude_judge",
-  "difficulty": "medium",
-  "root_cause": {
-    "category": "infrastructure",
-    "summary": "Node memory pressure triggered pod eviction during job execution",
-    "confidence": "high"
-  },
-  "evidence": [
-    {
-      "source": "splunk_ocp",
-      "message": "Node ip-10-0-1-100 MemoryPressure=True",
-      "is_root_cause": true
-    },
-    {
-      "source": "splunk_ocp",
-      "message": "Pod ansible-runner-pod-abc Evicted: Node has insufficient memory"
-    },
-    {
-      "source": "aap_job",
-      "message": "TASK [deploy-app : Wait for deployment] failed: Connection lost to executor pod"
-    }
-  ],
-  "recommendations": [
-    {
-      "priority": "high",
-      "action": "Investigate node memory usage and increase resource limits or add nodes",
-      "file": "cluster/node-config.yaml"
-    }
-  ],
-  "contributing_factors": [
-    "Node memory pressure pre-existed before job execution",
-    "No pod disruption budget configured for runner pods"
-  ],
-  "alternative_diagnoses": [
-    {
-      "category": "network",
-      "summary": "Network connectivity issue between AAP and OCP",
-      "why_wrong": "Splunk timeline shows pod was evicted due to memory pressure before connection loss. Network was fine; pod was terminated by kubelet."
-    },
-    {
-      "category": "application_bug",
-      "summary": "Task deployment step caused pod to crash",
-      "why_wrong": "Pod eviction event shows 'insufficient memory' reason, not application crash. Node pressure existed before task execution."
-    }
-  ],
-  "step5_comparison": {
-    "compared_at": "2025-01-15T11:01:00Z",
-    "category_match": false,
-    "confidence_match": false,
-    "root_cause_agreement": "none",
-    "discrepancies": [
-      {
-        "field": "root_cause.category",
-        "judge_value": "infrastructure",
-        "step5_value": "network",
-        "reasoning": "Step 5 focused on the 'Connection lost to executor pod' error message and diagnosed a network issue. However, the Splunk timeline shows MemoryPressure=True and pod eviction events occurred before the connection loss, making infrastructure the root cause."
-      },
-      {
-        "field": "root_cause.confidence",
-        "judge_value": "high",
-        "step5_value": "medium",
-        "reasoning": "Step 5 rated medium confidence due to ambiguity between network and infrastructure. The Splunk pod eviction events provide clear causal evidence that the judge rated as high confidence."
-      }
-    ],
-    "missed_by_judge": [],
-    "missed_by_step5": [
-      "Step 5 did not identify the MemoryPressure=True node condition as the root cause event.",
-      "Step 5 missed that the pod eviction preceded the connection loss in the timeline."
-    ],
-    "quality_score": {
-      "diagnosis_accuracy": "incorrect",
-      "evidence_completeness": "partial",
-      "recommendation_quality": "poor",
-      "overall": "D"
-    }
-  }
-}
-```
-
----
-
-## Troubleshooting
-
-**Error: Directory not found**
-```
-Run root-cause-analysis skill first:
-  root-cause-analysis skill for job <job_id>
-```
-
-**Error: Missing required files**
-```
-Check which files exist:
-  ls .analysis/<job_id>/
-
-Required: step1_job_context.json, step3_correlation.json, step4_github_fetch_history.json
-```
-
-**Warning: step4 has GitHub fetch errors**
-```
-If step4 shows "status": "404" or "error": "all_paths_failed":
-- Adjust confidence to "medium" or "low"
-- Note the missing data in contributing_factors
-```
-
-**Question: When should I read step5?**
-```
-Only AFTER annotation_draft.json is written to disk with all independent fields.
-Step 5 is read in Step 3 (Pass 2) for comparison only. Never read it during Steps 1-2.
-```
-
-**Question: What if step5 is missing?**
-```
-Skip Step 3 (Pass 2) entirely. The annotation is still valid without step5_comparison.
-The independent annotation (Pass 1) is the primary output.
-```
+**New/Enhanced Fields**:
+- `difficulty_score` - Numeric score 0-10
+- `difficulty_justification` - Explanation of score calculation
+- `root_cause.confidence` - high/medium/low assessment
+- `evidence[].source_file` - Full path to source analysis file
+- `evidence[].json_path` - Exact JSON path to evidence
+- `evidence[].exact_value` - Literal value from source file
+- `evidence[].exact_quote` - Literal text quote (for code/config)
+- `evidence[].line_number` - Line number in source file
+- `evidence[].confidence` - high/medium/low assessment
+- `alternative_diagnoses[].plausibility` - high/medium/low assessment
+- `alternative_diagnoses[].supporting_evidence` - List of supporting factors
+- `alternative_diagnoses[].contradicting_evidence` - List of contradictions
+- `consistency_check` - Multi-pass validation results (optional)
 
 ---
 
@@ -604,13 +481,10 @@ Before writing `annotation_draft.json` to disk, verify:
 - [ ] Did NOT read step5_analysis_summary.json yet
 - [ ] Root cause category matches evidence
 - [ ] Exactly one evidence item has `is_root_cause: true`
-- [ ] `github_path` included for all `agnosticv_config` / `agnosticd_code` evidence
-- [ ] Difficulty is one of: `easy`, `medium`, `hard`
-- [ ] At least 1-2 alternative diagnoses provided with `category`, `summary`, `why_wrong`
-- [ ] Alternative hypotheses are actually plausible (not strawmen)
-- [ ] All evidence comes directly from source files (no fabrication)
-- [ ] Recommendations include actionable fixes with file paths
-- [ ] Confidence level matches evidence quality
+- [ ] All evidence has traceability (source_file, json_path, exact_value/quote)
+- [ ] All evidence has confidence level (high/medium/low)
+- [ ] Difficulty score calculated with justification
+- [ ] Alternative diagnoses have plausibility levels
 - [ ] `annotation_draft.json` is written to disk before proceeding to Pass 2
 
 ### Pass 2 (Step 5 Comparison)
