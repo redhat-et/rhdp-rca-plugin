@@ -4,14 +4,12 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-import mlflow
-from mlflow.entities import SpanType
-
 from .config import Config
+from .tracing import SpanType, trace
 from .splunk_client import SplunkClient
 
 
-@mlflow.trace(name="Fetch correlated Splunk logs", span_type=SpanType.CHAIN)
+@trace(name="Fetch correlated Splunk logs", span_type=SpanType.CHAIN if SpanType else None)
 def fetch_correlated_logs(
     config: Config,
     job_context: dict[str, Any],
@@ -96,7 +94,6 @@ def fetch_correlated_logs(
     return results
 
 
-@mlflow.trace(name="Parse OCP logs", span_type=SpanType.PARSER)
 def _parse_ocp_logs(raw_logs: list[dict]) -> list[dict[str, Any]]:
     """Parse raw Splunk OCP log results into structured format."""
     parsed = []
@@ -128,7 +125,6 @@ def _parse_ocp_logs(raw_logs: list[dict]) -> list[dict[str, Any]]:
     return parsed
 
 
-@mlflow.trace(name="Extract unique pods", span_type=SpanType.PARSER)
 def _extract_unique_pods(raw_logs: list[dict]) -> list[dict[str, Any]]:
     """Extract unique pods from log results."""
     pods = {}
@@ -158,7 +154,7 @@ def _extract_unique_pods(raw_logs: list[dict]) -> list[dict[str, Any]]:
     return [{**pod, "containers": list(pod["containers"])} for pod in pods.values()]
 
 
-@mlflow.trace(name="Build correlation timeline", span_type=SpanType.CHAIN)
+@trace(name="Build correlation timeline", span_type=SpanType.CHAIN if SpanType else None)
 def build_correlation_timeline(
     job_context: dict[str, Any],
     splunk_logs: dict[str, Any],
@@ -235,7 +231,6 @@ def build_correlation_timeline(
     }
 
 
-@mlflow.trace(name="Analyze correlation strength", span_type=SpanType.PARSER)
 def _analyze_correlation(
     job_context: dict[str, Any],
     splunk_logs: dict[str, Any],

@@ -8,13 +8,9 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-import mlflow
-from mlflow.entities import SpanType
-
 from .config import Config
 
 
-@mlflow.trace(name="Get Splunk auth header", span_type=SpanType.TOOL)
 def get_auth_header(config: Config) -> dict[str, str]:
     """Get authorization header based on auth method."""
     if config.splunk.auth_method == "basic":
@@ -27,7 +23,6 @@ def get_auth_header(config: Config) -> dict[str, str]:
         raise ValueError("No authentication configured for Splunk")
 
 
-@mlflow.trace(name="Splunk API request", span_type=SpanType.RETRIEVER)
 def splunk_request(
     config: Config,
     endpoint: str,
@@ -61,7 +56,6 @@ def splunk_request(
         return json.loads(response.read().decode("utf-8"))
 
 
-@mlflow.trace(name="Create Splunk search job", span_type=SpanType.TOOL)
 def create_search_job(
     config: Config,
     search_query: str,
@@ -83,7 +77,6 @@ def create_search_job(
     return result.get("sid", "")
 
 
-@mlflow.trace(name="Wait for Splunk job", span_type=SpanType.TOOL)
 def wait_for_job(config: Config, sid: str, timeout: int = 300) -> dict[str, Any]:
     """Wait for a Splunk search job to complete. Returns job info."""
     start = time.time()
@@ -109,7 +102,6 @@ def wait_for_job(config: Config, sid: str, timeout: int = 300) -> dict[str, Any]
     return {"status": "timeout"}
 
 
-@mlflow.trace(name="Get Splunk search results", span_type=SpanType.RETRIEVER)
 def get_search_results(config: Config, sid: str, count: int = 1000) -> list[dict[str, Any]]:
     """Get results from a completed Splunk search job."""
     url = f"{config.splunk.host}/services/search/jobs/{sid}/results?output_mode=json&count={count}"
@@ -135,7 +127,6 @@ class SplunkClient:
     def __init__(self, config: Config):
         self.config = config
 
-    @mlflow.trace(name="Execute Splunk query", span_type=SpanType.CHAIN)
     def query(
         self,
         query: str,
@@ -152,7 +143,6 @@ class SplunkClient:
 
         return get_search_results(self.config, sid, count=max_results)
 
-    @mlflow.trace(name="Query OCP namespace logs", span_type=SpanType.RETRIEVER)
     def query_ocp_namespace(
         self,
         namespace: str,
@@ -167,7 +157,6 @@ class SplunkClient:
             query += " (error OR failed OR fatal OR exception OR FAILED OR ERROR)"
         return self.query(query, earliest, latest, max_results)
 
-    @mlflow.trace(name="Query logs by GUID", span_type=SpanType.RETRIEVER)
     def query_by_guid(
         self,
         guid: str,

@@ -4,9 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-import mlflow
 from dotenv import load_dotenv
-from mlflow.entities import SpanType
 
 
 def _none_if_empty(value: str | None) -> str | None:
@@ -49,7 +47,6 @@ class Config:
     remote_log_dir: str = ""
 
     @classmethod
-    @mlflow.trace(name="Load config from environment", span_type=SpanType.RETRIEVER)
     def from_env(cls, base_dir: Path | None = None) -> "Config":
         """Load configuration from environment variables."""
         if base_dir is None:
@@ -93,7 +90,6 @@ class Config:
             remote_log_dir=remote_log_dir,
         )
 
-    @mlflow.trace(name="Find job log file", span_type=SpanType.RETRIEVER)
     def find_job_log(self, job_id: str) -> Path | None:
         """Find a job log file by job ID in the configured directory."""
         if not self.job_logs_dir or not self.job_logs_dir.exists():
@@ -119,7 +115,6 @@ class Config:
 
         return None
 
-    @mlflow.trace(name="Validate Splunk config", span_type=SpanType.PARSER)
     def validate_splunk(self) -> list[str]:
         """Validate Splunk configuration, return list of errors."""
         errors = []
@@ -129,7 +124,6 @@ class Config:
             errors.append("SPLUNK_USERNAME/SPLUNK_PASSWORD or SPLUNK_TOKEN is required")
         return errors
 
-    @mlflow.trace(name="Validate GitHub config", span_type=SpanType.PARSER)
     def validate_github(self) -> list[str]:
         """Validate GitHub configuration, return list of errors."""
         errors = []

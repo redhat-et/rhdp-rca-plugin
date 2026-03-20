@@ -7,11 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-import mlflow
-from mlflow.entities import SpanType
+from .tracing import SpanType, trace
 
 
-@mlflow.trace(name="Load job log file", span_type=SpanType.RETRIEVER)
 def load_job_log(file_path: Path) -> dict[str, Any]:
     """Load a job log file (supports .json and .json.gz)."""
     path_str = str(file_path)
@@ -34,7 +32,6 @@ def load_job_log(file_path: Path) -> dict[str, Any]:
             return json.load(f)
 
 
-@mlflow.trace(name="Extract job context", span_type=SpanType.PARSER)
 def extract_job_context(job_data: dict[str, Any]) -> dict[str, Any]:
     """
     Extract correlation identifiers from job log.
@@ -93,7 +90,6 @@ def extract_job_context(job_data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@mlflow.trace(name="Extract namespace", span_type=SpanType.PARSER)
 def _extract_namespace(events: list[dict], guid: str) -> str:
     """Extract OCP namespace from events."""
     namespace_pattern = re.compile(
@@ -128,7 +124,6 @@ def _extract_namespace(events: list[dict], guid: str) -> str:
     return ""
 
 
-@mlflow.trace(name="Extract pod references", span_type=SpanType.PARSER)
 def _extract_pod_references(events: list[dict]) -> list[dict[str, str]]:
     """Extract pod names referenced in events."""
     pod_refs = []
@@ -161,7 +156,6 @@ def _extract_pod_references(events: list[dict]) -> list[dict[str, str]]:
     return pod_refs
 
 
-@mlflow.trace(name="Extract failed tasks", span_type=SpanType.PARSER)
 def _extract_failed_tasks(events: list[dict]) -> list[dict[str, Any]]:
     """Extract failed tasks with error details."""
     failed = []
@@ -187,7 +181,7 @@ def _extract_failed_tasks(events: list[dict]) -> list[dict[str, Any]]:
     return failed
 
 
-@mlflow.trace(name="Parse job log", span_type=SpanType.PARSER)
+@trace(name="Parse job log", span_type=SpanType.PARSER if SpanType else None)
 def parse_job_log(file_path: Path) -> dict[str, Any]:
     """
     Parse a job log file and extract all correlation context.
