@@ -7,11 +7,11 @@ allowed-tools:
   - Bash
 ---
 
-# RCA Annotator (Enhanced)
+# RCA Annotator
 
 Create high-accuracy ground-truth annotations for root-cause-analysis outputs with multi-pass consistency validation and complete traceability. This skill uses a two-pass approach with optional consistency checks to ensure reliable diagnostic labels for model evaluation.
 
-## Enhancements (v2)
+## Enhancements
 
 1. **Multi-Pass Consistency Checks** - Optional validation across multiple independent runs
 2. **Difficulty Calibration Rubric** - Objective 0-10 scoring system
