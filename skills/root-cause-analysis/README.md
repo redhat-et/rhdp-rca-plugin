@@ -170,6 +170,12 @@ Alternatively, specify the log file directly:
 .venv/bin/python scripts/cli.py status 1234567
 ```
 
+### MLFlow Tracing
+
+MLFlow tracing is supported for debugging and performance analysis. See the [main README](../../../README.md#mlflow-tracing-setup-guide-for-claude-code) for setup instructions.
+
+Once configured, traces will be available at `http://localhost:$MLFlow_PORT`.
+
 ## How It Works
 
 ### Steps 1-4: Automated Analysis (Python Scripts)

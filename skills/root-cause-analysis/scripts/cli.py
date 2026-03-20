@@ -3,9 +3,13 @@
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+import mlflow
+from mlflow.entities import SpanType
 
 # Support both module and direct execution
 if __name__ == "__main__" and __package__ is None:
@@ -31,7 +35,6 @@ def get_analysis_dir(config: Config, job_id: str) -> Path:
     analysis_dir.mkdir(parents=True, exist_ok=True)
     return analysis_dir
 
-
 def save_step(analysis_dir: Path, step: int, data: dict) -> Path:
     """Save step output to JSON file."""
     filename = f"step{step}_{get_step_name(step)}.json"
@@ -39,6 +42,71 @@ def save_step(analysis_dir: Path, step: int, data: dict) -> Path:
     with open(output_path, "w") as f:
         json.dump(data, f, indent=2, default=str)
     return output_path
+
+
+def upload_analysis_to_jumpbox(analysis_dir: Path, config: Config) -> bool:
+    """Upload analysis directory to Jumpbox in db_analysis/$SESSION_ID/."""
+    if not config.jumpbox_uri:
+        print("  Skipping upload: JUMPBOX_URI not configured")
+        return False
+
+    # Parse JUMPBOX_URI format: "user@host -p port"
+    parts = config.jumpbox_uri.split()
+    if len(parts) < 1:
+        print("  Error: Invalid JUMPBOX_URI format")
+        return False
+
+    ssh_target = parts[0]  # user@host
+    ssh_port = None
+
+    # Extract port if present
+    if "-p" in parts:
+        try:
+            port_idx = parts.index("-p")
+            if port_idx + 1 < len(parts):
+                ssh_port = parts[port_idx + 1]
+        except (ValueError, IndexError):
+            pass
+
+    session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
+    remote_base_dir = f"db_analysis/{session_id}"
+    job_id = analysis_dir.name
+
+    # Build SSH command
+    ssh_cmd = ["ssh"]
+    if ssh_port:
+        ssh_cmd.extend(["-p", ssh_port])
+    ssh_cmd.extend([ssh_target, f"mkdir -p {remote_base_dir}"])
+
+    # Create remote directory structure
+    try:
+        subprocess.run(
+            ssh_cmd,
+            check=True,
+            capture_output=True,
+            timeout=30,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        print(f"  Error creating remote directory: {e}")
+        return False
+
+    # Upload analysis directory using rsync
+    try:
+        rsync_cmd = ["rsync"]
+        if ssh_port:
+            rsync_cmd.extend(["-e", f"ssh -p {ssh_port}"])
+        rsync_cmd.extend(["-az", "--quiet", str(analysis_dir), f"{ssh_target}:{remote_base_dir}/"])
+
+        subprocess.run(
+            rsync_cmd,
+            check=True,
+            timeout=60,
+        )
+        print(f"  Uploaded to Jumpbox ({ssh_target}): {remote_base_dir}/{job_id}/")
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+        print(f"  Error uploading to Jumpbox: {e}")
+        return False
 
 
 def get_step_name(step: int) -> str:
@@ -63,7 +131,8 @@ def load_step(analysis_dir: Path, step: int) -> dict | None:
     return None
 
 
-def cmd_analyze(args: argparse.Namespace, config: Config) -> int:
+@mlflow.trace(name="Run full analysis", span_type=SpanType.CHAIN)
+def cmd_analyze(args: argparse.Namespace, config: Config, span=None) -> int:
     """Run full analysis pipeline."""
     # --fetch only makes sense with --job-id, not --job-log
     if getattr(args, "fetch", False) and not args.job_id:
@@ -204,6 +273,10 @@ def cmd_analyze(args: argparse.Namespace, config: Config) -> int:
             print(f"  Error fetching GitHub files: {e}")
             return 1
 
+    # Upload analysis to Jumpbox
+    print("\n[Upload] Uploading analysis to Jumpbox...")
+    upload_analysis_to_jumpbox(analysis_dir, config)
+
     # Print summary
     print("\n" + "=" * 60)
     print("Analysis Complete")
@@ -224,7 +297,6 @@ def cmd_analyze(args: argparse.Namespace, config: Config) -> int:
         _print_quick_summary(job_context, splunk_logs, correlation)
 
     return 0
-
 
 def _print_quick_summary(job_context: dict, splunk_logs: dict, correlation: dict):
     """Print a quick summary of the analysis."""
@@ -259,7 +331,8 @@ def _print_quick_summary(job_context: dict, splunk_logs: dict, correlation: dict
     print(f"\nCorrelation: {corr.get('method')} ({corr.get('confidence')} confidence)")
 
 
-def cmd_parse(args: argparse.Namespace, config: Config) -> int:
+@mlflow.trace(name="Parse job log", span_type=SpanType.CHAIN)
+def cmd_parse(args: argparse.Namespace, config: Config, span=None):
     """Parse job log only (Step 1)."""
     job_log_path = Path(args.job_log)
 
@@ -279,7 +352,8 @@ def cmd_parse(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
-def cmd_query(args: argparse.Namespace, config: Config) -> int:
+@mlflow.trace(name="Run Splunk query", span_type=SpanType.RETRIEVER)
+def cmd_query(args: argparse.Namespace, config: Config, span=None):
     """Run ad-hoc Splunk query."""
     from .splunk_client import SplunkClient
 
@@ -315,7 +389,8 @@ def cmd_query(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
-def cmd_status(args: argparse.Namespace, config: Config) -> int:
+@mlflow.trace(name="Show analysis status", span_type=SpanType.PARSER)
+def cmd_status(args: argparse.Namespace, config: Config, span=None):
     """Show analysis status for a job."""
     analysis_dir = config.analysis_dir / args.job_id
 
@@ -339,6 +414,25 @@ def cmd_status(args: argparse.Namespace, config: Config) -> int:
     return 0
 
 
+def _run_session_start_hook(base_dir: Path):
+    """Run MLflow autolog setup."""
+    try:
+        tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "http://127.0.0.1:5000")
+        experiment_name = os.environ.get("MLFLOW_EXPERIMENT_NAME", "Default")
+
+        result = subprocess.run(
+            ["mlflow", "autolog", "claude", "-u", tracking_uri, "-n", experiment_name],
+            cwd=str(base_dir),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout:
+            print(f"\n{result.stdout.strip()}")
+    except Exception:
+        pass
+
+@mlflow.trace(name="root-cause-analysis", span_type=SpanType.TOOL)
 def main():
     parser = argparse.ArgumentParser(
         description="Splunk Log Analysis - Correlate AAP job logs with Splunk OCP logs"
@@ -381,7 +475,28 @@ def main():
     # Load config
     base_dir = Path(__file__).parent.parent
     config = Config.from_env(base_dir)
+    # Initialize tracer if available
+    mlflow.update_current_trace(
+        metadata={
+            "mlflow.trace.session": f"{os.environ.get('CLAUDE_SESSION_ID')}",
+            "mlflow.trace.user": os.environ.get("MLFLOW_TAG_USER"),
+            "mlflow.source.name": "root-cause-analysis",
+            "mlflow.source.git.repoURL": "https://github.com/redhat-et/aiops-skills/blob/main/skills/root-cause-analysis/SKILL.md",
+        },
+    )
 
+    inputs = {
+        "request": f"root-cause-analysis {args.command} {args} ",
+        "job_id": str(getattr(args, "job_id", None)),
+        "job_log": str(getattr(args, "job_log", None)),
+        "query": getattr(args, "query", None),
+        "earliest": getattr(args, "earliest", None),
+        "latest": getattr(args, "latest", None),
+        "max_results": getattr(args, "max_results", None),
+        "command": args.command,
+    }
+    span = mlflow.get_current_active_span()
+    span.set_inputs(inputs)
     # Dispatch command
     commands = {
         "analyze": cmd_analyze,
@@ -390,7 +505,9 @@ def main():
         "status": cmd_status,
     }
 
-    return commands[args.command](args, config)
+    outputs = commands[args.command](args, config, span)
+    _run_session_start_hook(base_dir)
+    return outputs
 
 
 if __name__ == "__main__":

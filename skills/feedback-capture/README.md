@@ -13,9 +13,9 @@ The Feedback Capture skill is designed to:
 ## Components
 
 - **`SKILL.md`**: Defines the agent's behavior, including the steps to ask for feedback, determining the category, and the command to run the formatting script.
-- **`scripts/formatting.py`**: A Python script that handles the actual writing of feedback to disk.
+- **`scripts/mlflow_feedback.py`**: A Python script that handles the actual writing of feedback to disk.
     - **Input**: Category, Feedback text, Context summary, Skill name.
-    - **Output**: Appends a formatted entry (with a timestamp and incrementing ID) to `~/feedback.txt` (default).
+    - **Output**: Trace analysis on ML Flow (default).
 
 ## Usage
 
@@ -23,7 +23,7 @@ This skill is typically triggered when an interaction completes or when the user
 
 ### Script Arguments
 
-The `formatting.py` script accepts the following arguments:
+The `mlflow_feedback.py` script accepts the following arguments:
 - `--category`: The category of the feedback (e.g., "Positive", "Bug").
 - `--skill`: The name of the skill being evaluated.
 - `--feedback`: The actual text of the user's feedback.

@@ -18,9 +18,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import mlflow
 import requests
+from mlflow.entities import SpanType
 
 
+@mlflow.trace(name="Create error result", span_type=SpanType.TOOL)
 def create_error_result(path: str, status: str = "404") -> dict[str, Any]:
     """Create standardized error result dictionary."""
     return {"error": "all_paths_failed", "paths_tried": [{"path": path, "status": status}]}
@@ -37,6 +40,7 @@ class GitHubClient:
             "Accept": "application/vnd.github.v3+json",
         }
 
+    @mlflow.trace(name="Get GitHub file content", span_type=SpanType.RETRIEVER)
     def get_file_content(self, owner: str, repo: str, path: str) -> dict:
         """Fetch file content from GitHub API"""
         url = f"{self.base_url}/repos/{owner}/{repo}/contents/{path}"
@@ -61,6 +65,7 @@ class GitHubClient:
             print(f"[ERROR] Failed to fetch {path}: {e}")
             return create_error_result(path, status="unknown_error")
 
+    @mlflow.trace(name="Search GitHub file", span_type=SpanType.RETRIEVER)
     def search_file(self, owner: str, repo: str, query: str) -> dict | None:
         """Search for file using GitHub code search API"""
         url = f"{self.base_url}/search/code?q=repo:{owner}/{repo} {query} in:path"
@@ -81,6 +86,7 @@ class GitHubClient:
 
 
 # Step 4a: Parse GitHub Paths Functions
+@mlflow.trace(name="Parse job name", span_type=SpanType.PARSER)
 def parse_job_name(job_name: str, guid: str) -> dict[str, Any]:
     """Parse RHPDS job name using GUID as anchor."""
     warnings = []
@@ -134,6 +140,7 @@ def parse_job_name(job_name: str, guid: str) -> dict[str, Any]:
     }
 
 
+@mlflow.trace(name="Parse task path", span_type=SpanType.PARSER)
 def parse_task_path(task_path: str) -> dict[str, Any]:
     """Parse task_path to extract repository and file location."""
     # Collections pattern
@@ -187,6 +194,7 @@ class Step4Analyzer:
         self.analysis_dir = analysis_dir
         self.github = github_client
 
+    @mlflow.trace(name="Load Step 1 context", span_type=SpanType.RETRIEVER)
     def load_step1(self) -> dict:
         """Load Step 1 job context"""
         step1_file = self.analysis_dir / "step1_job_context.json"
@@ -196,6 +204,7 @@ class Step4Analyzer:
         with open(step1_file) as f:
             return json.load(f)
 
+    @mlflow.trace(name="Parse failed tasks", span_type=SpanType.PARSER)
     def parse_failed_tasks(self, job_context: dict) -> dict:
         """Step 4a: Parse failed tasks and extract file paths"""
         print("[INFO] Step 4a: Parsing failed tasks...")
@@ -243,6 +252,7 @@ class Step4Analyzer:
             "failed_tasks": enriched_tasks,
         }
 
+    @mlflow.trace(name="Fetch AgnosticV configs", span_type=SpanType.RETRIEVER)
     def fetch_configs(self, platform: str, catalog: str, env: str) -> dict:
         """Step 4b: Fetch configs with backward discovery"""
         print("[INFO] Step 4b: Fetching AgnosticV configurations...")
@@ -303,6 +313,7 @@ class Step4Analyzer:
 
         return fetched_configs
 
+    @mlflow.trace(name="Fetch AgnosticD workload code", span_type=SpanType.RETRIEVER)
     def fetch_workload_code(self, investigation_targets: dict) -> dict:
         """Step 4c: Fetch all AgnosticD workload code"""
         print("[INFO] Step 4c: Fetching AgnosticD workload code...")
@@ -346,6 +357,7 @@ class Step4Analyzer:
 
         return fetched_workload
 
+    @mlflow.trace(name="Run Step 4 analysis", span_type=SpanType.CHAIN)
     def run(self) -> dict:
         """Execute full Step 4 - fetch all GitHub files"""
         print(f"[INFO] Starting Step 4 analysis for job {self.job_id}...")
@@ -408,6 +420,7 @@ class Step4Analyzer:
         return result
 
 
+@mlflow.trace(name="Step 4 main", span_type=SpanType.CHAIN)
 def main():
     parser = argparse.ArgumentParser(
         description="Step 4: Fetch all relevant GitHub configuration and workload files"
