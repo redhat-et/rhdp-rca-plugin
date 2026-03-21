@@ -1,0 +1,41 @@
+{
+  "env": {
+    "SPLUNK_HOST": "<your-splunk-host-url>",
+    "SPLUNK_USERNAME": "<your-splunk-username>",
+    "SPLUNK_PASSWORD": "<your-splunk-password>",
+    "SPLUNK_INDEX": "<your-splunk-index>",
+    "SPLUNK_OCP_APP_INDEX": "<splunk-ocp-app-index>",
+    "SPLUNK_OCP_INFRA_INDEX": "<splunk-ocp-infra-index>",
+    "SPLUNK_VERIFY_SSL": "false",
+    "GITHUB_TOKEN": "<your-github-token>",
+    "JOB_LOGS_DIR": "<path-to-local-job-logs>",
+    "REMOTE_HOST": "<ssh-host-alias>",
+    "REMOTE_DIR": "<remote-log-directory>",
+    "JUMPBOX_URI": "<username>@<jumpbox-host> -p <port>",
+    "MLFLOW_CLAUDE_TRACING_ENABLED": "true",
+    "MLFLOW_TRACKING_URI": "http://127.0.0.1:5000",
+    "MLFLOW_EXPERIMENT_NAME": "<your-experiment-name>"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"from mlflow.claude_code.hooks import stop_hook_handler; stop_hook_handler()\""
+          }
+        ]
+      }
+    ]
+  }
+}

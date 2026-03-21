@@ -18,12 +18,62 @@ Investigate failed jobs by correlating Ansible Automation Platform (AAP) job log
 When a user asks to analyze a failed job, execute these steps automatically.
 The skill's base path is provided when this skill is invoked. Run scripts relative to this folder.
 
-### Setup (run once per session if .venv doesn't exist)
+### Preflight Check (run before first analysis)
 
 ```bash
-# Create virtual environment and install dependencies
+# Create virtual environment and install dependencies (if .venv doesn't exist)
 python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt
+
+# Check all prerequisites (use --json for structured output)
+.venv/bin/python scripts/cli.py setup --json
 ```
+
+Review the JSON output. Some settings are required, others are optional:
+
+**Required** (skill will not proceed without these):
+- **JOB_LOGS_DIR** — Local directory for job log files
+
+**Recommended** (analysis works without these but functionality is reduced):
+- **MLFlow** — Tracing configuration for recording analysis runs
+
+**Optional** (skill runs with reduced functionality when missing):
+- **SSH / REMOTE_HOST** not configured: `--fetch` flag won't work (user must provide logs in JOB_LOGS_DIR manually)
+- **Splunk** not configured: Steps 2-3 (log correlation) will be skipped
+- **GitHub token** not configured: Step 4 (config fetching) will be skipped
+
+#### Interactive Setup for Missing Configs
+
+If any checks have `"status": "missing"` and `"configurable": true`, offer to help the user configure them:
+
+1. List the missing configurable items grouped by check name
+2. Ask: "Would you like me to help configure these? I'll walk you through each one."
+3. If yes, for each missing check with `"configurable": true`:
+   - Show the check name and each `env_vars[].prompt` to explain what's needed
+   - If the env var has a `"default"`, mention it (user can press enter to accept)
+   - If the env var has `"optional": true`, let the user know they can skip it
+   - Ask the user for the value
+   - **SSH special handling**: If the SSH check has `"ssh_setup_needed": true`:
+     - Ask the user for their SSH host alias name
+     - Check if that alias already exists in `~/.ssh/config` — if so, use it as `REMOTE_HOST`
+     - If it doesn't exist, ask: do you want to create a new SSH config entry? If yes, ask for: hostname, username, port (default 22), and optional identity file path
+     - Read `~/.ssh/config`, append the new `Host` block, and write it back
+     - Then set `REMOTE_HOST` to the alias name
+4. After collecting all values, read the project's `.claude/settings.json` file
+5. Merge the new values into the `"env"` block (create it if it doesn't exist)
+6. Write the updated settings file
+7. Tell the user to **restart the Claude Code session** for env vars to take effect
+8. **Important**: Write secrets (tokens, passwords) to `.claude/settings.json` — ensure this file is in `.gitignore`
+
+If checks show non-configurable errors (e.g., venv issues, rsync not found), provide the fix command instead.
+
+#### MLFlow Server Startup
+
+The `MLFlow server` preflight check automatically handles server connectivity:
+- If the server is unreachable and `JUMPBOX_URI` is configured, it starts an SSH tunnel automatically
+- If the tunnel is already running, it skips startup
+- If the tunnel fails, it reports the error but the skill can still proceed (MLFlow is recommended, not required)
+
+If any **required** checks (JOB_LOGS_DIR) are still missing after the setup flow, do **not** proceed to analysis — tell the user what's still needed. If MLFlow is missing, warn that tracing won't be recorded but proceed. If all required checks pass (recommended/optional items may remain missing), proceed to analysis.
 
 ### Step 1-4: Run the analysis CLI
 
