@@ -175,7 +175,7 @@ Alternatively, specify the log file directly:
 MLflow tracing is supported for debugging and performance analysis but is **not required**. All analysis commands work without MLflow installed.
 
 To enable tracing:
-1. Install MLflow: `pip install mlflow[genai]>=3.4` (or `pip install -e ".[mlflow]"` from the repo root)
+1. Install MLflow: `pip install "mlflow[genai]>=3.4"` (or `pip install -e ".[mlflow]"` from the repo root)
 2. Configure `MLFLOW_PORT`, `MLFLOW_EXPERIMENT_NAME`, and optionally `JUMPBOX_URI` in `.claude/settings.json`
 3. The `session-start.sh` hook will auto-start the SSH tunnel and configure tracing when `MLFLOW_PORT` is set
 

@@ -12,7 +12,7 @@ if [ -n "$MLFLOW_PORT" ]; then
     echo "export MLFLOW_TAG_USER='$MLFLOW_TAG_USER'" >> "$CLAUDE_ENV_FILE"
     echo "export MLFLOW_TRACKING_URI='http://127.0.0.1:$MLFLOW_PORT'" >> "$CLAUDE_ENV_FILE"
     echo "export MLFLOW_EXPERIMENT_NAME='$MLFLOW_EXPERIMENT_NAME'" >> "$CLAUDE_ENV_FILE"
-    echo "export MLFLOW_TRACING_ENABLED='$MLFLOW_TRACING_ENABLED'" >> "$CLAUDE_ENV_FILE"
+    echo "export MLFLOW_CLAUDE_TRACING_ENABLED='$MLFLOW_CLAUDE_TRACING_ENABLED'" >> "$CLAUDE_ENV_FILE"
   fi
 
   # Start SSH tunnel if not already running
@@ -35,5 +35,5 @@ if [ -n "$MLFLOW_PORT" ]; then
   fi
 
   mlflow experiments create -n "$MLFLOW_EXPERIMENT_NAME" 2>/dev/null || true
-  mlflow autolog claude -u "$MLFLOW_TRACKING_URI" -n "$MLFLOW_EXPERIMENT_NAME" -t "$MLFLOW_TRACING_ENABLED"
+  mlflow autolog claude -u "$MLFLOW_TRACKING_URI" -n "$MLFLOW_EXPERIMENT_NAME" -t "$MLFLOW_CLAUDE_TRACING_ENABLED"
 fi

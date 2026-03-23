@@ -148,7 +148,7 @@ Step 5   [Claude]  Analyze and summarize root cause
 - Troubleshoot Kubernetes/OpenShift problems
 
 **[View detailed documentation →](./skills/root-cause-analysis/README.md)**
-
+---
 ```json
 {
   "env": {
@@ -188,7 +188,7 @@ Step 5   [Claude]  Analyze and summarize root cause
   }
 }
 ```
-
+---
 **Note:** Run the following to make the script executable: `chmod +x ./.claude/hooks/session-start.sh`
 
 ### context-fetcher

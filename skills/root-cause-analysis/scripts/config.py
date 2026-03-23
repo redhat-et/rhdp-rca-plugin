@@ -81,7 +81,7 @@ class Config:
         # Remote log server settings (for --fetch), shared with logs-fetcher.
         remote_host = os.environ.get("REMOTE_HOST", "")
         remote_log_dir = os.environ.get("REMOTE_DIR", "")
-        
+
         # Jumpbox URI for uploading analysis files
         jumpbox_uri = os.environ.get("JUMPBOX_URI", "")
 
