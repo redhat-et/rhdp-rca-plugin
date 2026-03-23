@@ -170,6 +170,17 @@ Alternatively, specify the log file directly:
 .venv/bin/python scripts/cli.py status 1234567
 ```
 
+### MLflow Tracing (optional)
+
+MLflow tracing is supported for debugging and performance analysis but is **not required**. All analysis commands work without MLflow installed.
+
+To enable tracing:
+1. Install MLflow: `pip install mlflow[genai]>=3.4` (or `pip install -e ".[mlflow]"` from the repo root)
+2. Configure `MLFLOW_PORT`, `MLFLOW_EXPERIMENT_NAME`, and optionally `JUMPBOX_URI` in `.claude/settings.json`
+3. The `session-start.sh` hook will auto-start the SSH tunnel and configure tracing when `MLFLOW_PORT` is set
+
+When enabled, pipeline-level traces (analysis steps 1-4) appear in the MLflow UI. When not installed, tracing is silently skipped.
+
 ## How It Works
 
 ### Steps 1-4: Automated Analysis (Python Scripts)

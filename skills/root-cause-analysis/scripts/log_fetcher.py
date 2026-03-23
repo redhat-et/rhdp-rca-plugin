@@ -4,10 +4,13 @@ import shlex
 import subprocess
 from pathlib import Path
 
+from .tracing import SpanType, trace
+
 SSH_TIMEOUT = 30
 RSYNC_TIMEOUT = 120
 
 
+@trace(name="Fetch job log from remote", span_type=SpanType.RETRIEVER if SpanType else None)
 def fetch_job_log(job_id: str, local_dir: Path, remote_host: str, remote_dir: str) -> list[str]:
     """
     Fetch log files for a single job from the remote server.

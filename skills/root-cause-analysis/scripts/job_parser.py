@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .tracing import SpanType, trace
+
 
 def load_job_log(file_path: Path) -> dict[str, Any]:
     """Load a job log file (supports .json and .json.gz)."""
@@ -179,6 +181,7 @@ def _extract_failed_tasks(events: list[dict]) -> list[dict[str, Any]]:
     return failed
 
 
+@trace(name="Parse job log", span_type=SpanType.PARSER if SpanType else None)
 def parse_job_log(file_path: Path) -> dict[str, Any]:
     """
     Parse a job log file and extract all correlation context.

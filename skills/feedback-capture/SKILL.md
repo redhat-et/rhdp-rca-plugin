@@ -25,7 +25,7 @@ Step 4 [Claude] You MUST run scripts/formatting.py \
 Take the comment the user gave as feedback and create the following inputs for scripts/formatting.py and you must call scripts/formatting.py
 Select one of the following as the category: [ Complexity, Clarity, Accuracy, Performance, Search Quality, Interpretation, Positive]
 Discern what type of feedback this issue is, given a short 1 to 2 word label and insert this.
-Example: user feedback: “It keeps repeating the same solution to the code”, Category: “Repetition”
+Example: user feedback: "It keeps repeating the same solution to the code", Category: "Repetition"
 
 Run: python scripts/formatting.py \
   --category {Category} \

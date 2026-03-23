@@ -37,13 +37,10 @@ def get_chat_history_jsonl_path(session_id=None):
     if not os.path.exists(projects_dir):
         return None
 
-    # If session_id is provided, try to find it directly
     if session_id:
-        # Search for file ending with session_id.jsonl recursively
         pattern = os.path.join(projects_dir, "**", f"*{session_id}*.jsonl")
         files = glob.glob(pattern, recursive=True)
         if files:
-            # Return the first match (should be unique enough with UUID)
             return files[0]
         print(
             f"Warning: Specific session file for ID {session_id} not found. Falling back to latest."

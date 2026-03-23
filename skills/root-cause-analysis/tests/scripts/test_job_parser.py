@@ -8,11 +8,10 @@ import pytest
 
 # Add root-cause-analysis/scripts to path
 rca_root = Path(__file__).resolve().parent.parent.parent
-scripts_path = rca_root / "scripts"
 schemas_path = rca_root / "schemas"
-sys.path.append(str(scripts_path))
+sys.path.append(str(rca_root))
 
-from job_parser import (  # noqa: E402
+from scripts.job_parser import (  # noqa: E402
     _extract_failed_tasks,
     _extract_namespace,
     _extract_pod_references,
