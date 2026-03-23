@@ -313,9 +313,18 @@ allowed-tools:
   - Read
 ---
 
-# MLFlow Tracing Setup Guide for Claude Code
+# My Skill
 
-## Step 1: Install Dependencies
+Instructions for Claude...
+```
+
+See [template-skill](./template-skill/) for a minimal example and [agent_skills_spec.md](./agent_skills_spec.md) for the full specification.
+
+---
+
+## MLFlow Tracing Setup Guide for Claude Code
+
+### Step 1: Install Dependencies
 
 1. Create and activate a virtual environment:
 
@@ -337,7 +346,7 @@ pip install mlflow
 mlflow autolog claude
 ```
 
-## Step 2: Configure Claude Settings
+### Step 2: Configure Claude Settings
 
 Add the following environment variables to your Claude settings file at `~/.claude/settings.json`:
 
@@ -355,7 +364,7 @@ Add the following environment variables to your Claude settings file at `~/.clau
 **Note**: Replace `<your-username>@<your-jumpbox> -p <port>` with your actual jumpbox connection details.
 Replace `<experiment-name>` to a experiment name to the desired experiment name. This will automatically create the experiment for you if it does not exist.
 
-## Step 3: Add hooks SessionStart to hooks in .claude/settings.json
+### Step 3: Add hooks SessionStart to hooks in .claude/settings.json
 ```json
 {
   "hooks": {
@@ -379,9 +388,9 @@ Make the script executable:
 chmod +x ./.claude/hooks/session-start.sh
 ```
 
-## Step 4: cd into AIOPS-SKILLS/ dir (where claude will be running)
+### Step 4: cd into AIOPS-SKILLS/ dir (where claude will be running)
 
-## Step 5: Enable Claude Autologging
+### Step 5: Enable Claude Autologging
 
 Before starting Claude, run:
 
@@ -389,26 +398,20 @@ Before starting Claude, run:
 mlflow autolog claude
 ```
 
-## Step 6: Start Claude
+### Step 6: Start Claude
 
 ```bash
 claude
 ```
 
-## Step 7: Run a Prompt
+### Step 7: Run a Prompt
 
 Enter any prompt in Claude to generate a trace.
 
-## Step 8: View Traces
-  Open your browser and navigate to:                                                                                                            
+### Step 8: View Traces
+Open your browser and navigate to:                                                                                                            
 http://localhost:5000                                                                                                                                             
-  Your MLFlow dashboard will display your trace along with any previous traces.
-# My Skill
-
-Instructions for Claude...
-```
-
-See [template-skill](./template-skill/) for a minimal example and [agent_skills_spec.md](./agent_skills_spec.md) for the full specification.
+Your MLFlow dashboard will display your trace along with any previous traces.
 
 ## Contributing
 
