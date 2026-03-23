@@ -67,7 +67,7 @@ python3 -m venv .venv
 
 ---
 
-**Post-Step4 GitHub MCP Verification**: If step4 output contains `"error": "all_paths_failed"` or any error status (e.g., `"status": "404"`, `"status": "timeout"`, `"status": "500"`) in `paths_tried` arrays, reasoning errors using MCP tools. See [post-step4-verification.md](post-step4-verification.md) for complete verification process.
+**GitHub MCP Verification**: If step4 output contains `"error": "all_paths_failed"` or any error status (e.g., `"status": "404"`, `"status": "timeout"`, `"status": "500"`) in `paths_tried` arrays, reasoning errors using MCP tools. See [github_mcp_verification.md](github_mcp_verification.md) for complete verification process.
 
 ---
 

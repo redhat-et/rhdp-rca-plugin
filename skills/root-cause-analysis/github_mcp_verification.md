@@ -1,4 +1,4 @@
-# Post-Step4 GitHub MCP Verification for Errors
+# GitHub MCP Verification for Errors
 
 After step4 completes and outputs `step4_github_fetch_history.json`, Claude reasoning any errors (e.g., 404, timeout, HTTP errors) using MCP tools.
 
