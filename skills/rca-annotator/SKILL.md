@@ -1,6 +1,6 @@
 ---
 name: rca-annotator
-description: Two-pass annotation with multi-pass consistency checks, difficulty calibration rubric, and complete evidence traceability for accurate ground-truth labels of root-cause-analysis outputs.
+description: Annotation with multi-pass consistency checks, difficulty calibration rubric, and complete evidence traceability for accurate ground-truth labels of root-cause-analysis outputs.
 allowed-tools:
   - Read
   - Write
@@ -9,7 +9,7 @@ allowed-tools:
 
 # RCA Annotator
 
-Create high-accuracy ground-truth annotations for root-cause-analysis outputs with multi-pass consistency validation and complete traceability. This skill uses a two-pass approach with optional consistency checks to ensure reliable diagnostic labels for model evaluation.
+Create high-accuracy ground-truth annotations for root-cause-analysis outputs with optional multi-pass consistency validation and complete traceability.
 
 ## Enhancements
 
@@ -24,7 +24,6 @@ Use this skill when:
 - You want to create labeled training/evaluation data
 - You need to assess the difficulty of diagnosing specific failures
 - You want to identify plausible alternative diagnoses (red herrings)
-- You want to evaluate step 5 diagnosis quality against independent ground truth (pass 2)
 
 **DO NOT** use this skill to:
 - Perform the initial root cause analysis (use `root-cause-analysis` skill instead)
@@ -37,33 +36,23 @@ Before running this skill, verify that root-cause-analysis has been completed:
 # Check that analysis directory exists
 ls -la .analysis/<job_id>/
 
-# Required files for Pass 1 (independent annotation)
+# Required files
 # step1_job_context.json       ← Job metadata, failed tasks
 # step3_correlation.json        ← Timeline with AAP + Splunk events
 # step4_github_fetch_history.json ← Configuration and code context
-
-# Optional file for Pass 2 (step 5 comparison)
-# step5_analysis_summary.json  ← Model diagnosis output (read ONLY in Step 3)
 ```
 
 If required files are missing, run `root-cause-analysis` skill first.
-If `step5_analysis_summary.json` is missing, Pass 2 (Step 3) will be skipped.
 
 ## How It Works
 
-**Two-Pass Approach with Optional Consistency Validation**: Pass 1 acts as an independent judge reading only steps 1-4 (NOT step 5) to produce unbiased ground-truth labels. Optionally run 2-3 independent passes to validate consistency. Pass 2 then compares the independent annotation against step 5 to evaluate model diagnosis quality.
-
 **Workflow**:
 1. Validate `.analysis/<job_id>/` directory exists with required files
-2. Read step1, step3, step4 outputs (DO NOT read step5 yet)
-3. Perform independent analysis with enhanced evidence scoring
+2. Read step1, step3, step4 outputs
+3. Perform analysis with enhanced evidence scoring
 4. **OPTIONAL**: Run multi-pass consistency check
 5. Generate annotation with root cause, evidence (with strength/confidence), difficulty score, recommendations, and alternatives
-6. **Write** `annotation_draft.json` to disk — independent annotation is now final
-7. **If `step5_analysis_summary.json` exists**: Read step 5 and compare against independent annotation
-8. Append `step5_comparison` block to `annotation_draft.json` and save
-
-**CRITICAL**: Complete and write all independent annotation fields to disk BEFORE reading step 5. Do NOT revise any independent fields after reading step 5. The comparison is additive, not corrective.
+6. **Write** `annotation_draft.json` to disk
 
 ---
 
@@ -86,23 +75,19 @@ echo "All required files present" || echo "ERROR: Missing required files"
 - If directory doesn't exist: "Run root-cause-analysis skill first for job <job_id>"
 - If files missing: List which files are missing and provide guidance
 
-### Reading Order (Pass 1 Only)
-
-**CRITICAL**: Read files in this specific order. Do NOT read step5 until Step 4 (Pass 2):
+### Reading Order
 
 1. **Read step1_job_context.json** - Understand job metadata, failed tasks, error messages
 2. **Read step3_correlation.json** - Get correlated timeline (this includes relevant Splunk context)
 3. **Read step4_github_fetch_history.json** - Review configuration hierarchy and code
 
-**DO NOT READ YET**:
-- `step5_analysis_summary.json` - Deferred to Step 4 (Pass 2), after independent annotation is written to disk
-- `step2_splunk_logs.json` - Step3 already includes relevant correlated events
+**Note**: `step2_splunk_logs.json` is not needed — step3 already includes relevant correlated events.
 
 ---
 
-## Step 2: Act as Judge LLM
+## Step 2: Analyze and Annotate
 
-Perform independent analysis following these patterns:
+Perform analysis following these patterns:
 
 ### A. Root Cause Category Assessment
 
@@ -298,7 +283,7 @@ Run 2-3 independent annotation passes and check consistency:
 
 ---
 
-## Step 3: Finalize and Write Independent Annotation
+## Step 3: Finalize and Write Annotation
 
 **Before writing**, verify:
 - [ ] All evidence has traceability fields (source_file, json_path, exact_value/quote)
@@ -309,62 +294,6 @@ Run 2-3 independent annotation passes and check consistency:
 - [ ] Alternative diagnoses have plausibility levels
 
 Write `annotation_draft.json` to disk with complete schema (see Output Format below).
-
----
-
-## Step 4: Compare with Step 5 (Pass 2)
-
-**CRITICAL**: Only proceed to this step AFTER `annotation_draft.json` has been written to disk with all independent fields finalized. Do NOT revise any independent fields based on what you read here.
-
-If `step5_analysis_summary.json` does not exist, skip this step entirely.
-
-### Read Step 5
-
-```bash
-# Only read step5 AFTER annotation_draft.json is saved
-test -f .analysis/<job_id>/step5_analysis_summary.json && echo "Step 5 found — proceeding with comparison" || echo "Step 5 not found — skipping Pass 2"
-```
-
-Read `.analysis/<job_id>/step5_analysis_summary.json` and compare it against your independent annotation.
-
-### Comparison Process
-
-Evaluate step 5 against the independent annotation across these dimensions:
-
-**A. Root Cause Agreement**
-
-Compare the judge's `root_cause` against step 5's `root_cause`:
-
-- `category_match` — Do both identify the same root cause category?
-- `summary_alignment` — Do the summaries describe the same underlying issue, even if worded differently?
-- `confidence_match` — Do both assign the same confidence level?
-- `root_cause_agreement` — Overall: `full` (category + summary align), `partial` (same category, different nuance), or `none` (fundamentally different diagnosis)
-
-**B. Evidence Coverage**
-
-Compare evidence items between judge and step 5:
-
-- Which evidence did step 5 include that the judge also found?
-- Which evidence did step 5 find that the judge missed? (`missed_by_judge`)
-- Which evidence did the judge find that step 5 missed? (`missed_by_step5`)
-- For each missed item, briefly explain its significance
-
-**C. Discrepancies**
-
-For each field where judge and step 5 disagree, document:
-
-- The field path (e.g., `root_cause.confidence`, `difficulty`)
-- The judge's value vs step 5's value
-- Reasoning for why they differ (based on the raw evidence from steps 1-4)
-
-**D. Quality Score**
-
-Rate step 5's diagnosis quality using the independent annotation as ground truth:
-
-- `diagnosis_accuracy` — `correct` (root cause matches), `partial` (right category, wrong specifics), `incorrect` (wrong root cause)
-- `evidence_completeness` — `complete` (all key evidence found), `partial` (missed some), `incomplete` (missed critical evidence)
-- `recommendation_quality` — `good` (actionable, correct files), `adequate` (generally right direction), `poor` (wrong or vague)
-- `overall` — Letter grade: `A` (correct diagnosis, complete evidence, good recommendations), `B` (mostly correct with minor gaps), `C` (partially correct or significant evidence gaps), `D` (incorrect diagnosis or major evidence omissions), `F` (fundamentally wrong)
 
 ---
 
@@ -434,22 +363,6 @@ Save annotation to `.analysis/<job_id>/annotation_draft.json` following this sch
       "confidence_distribution": {"high": 2, "medium": 1, "low": 0},
       "confidence_mode": "high"
     }
-  },
-
-  "step5_comparison": {
-    "compared_at": "2026-03-19T12:01:00Z",
-    "category_match": true,
-    "confidence_match": false,
-    "root_cause_agreement": "full | partial | none",
-    "discrepancies": [],
-    "missed_by_judge": [],
-    "missed_by_step5": [],
-    "quality_score": {
-      "diagnosis_accuracy": "correct | partial | incorrect",
-      "evidence_completeness": "complete | partial | incomplete",
-      "recommendation_quality": "good | adequate | poor",
-      "overall": "A | B | C | D | F"
-    }
   }
 }
 ```
@@ -473,29 +386,14 @@ Save annotation to `.analysis/<job_id>/annotation_draft.json` following this sch
 
 ## Quality Checklist
 
-### Pass 1 (Independent Annotation)
-
 Before writing `annotation_draft.json` to disk, verify:
 
 - [ ] All required files were read (step1, step3, step4)
-- [ ] Did NOT read step5_analysis_summary.json yet
 - [ ] Root cause category matches evidence
 - [ ] Exactly one evidence item has `is_root_cause: true`
 - [ ] All evidence has traceability (source_file, json_path, exact_value/quote)
 - [ ] All evidence has confidence level (high/medium/low)
 - [ ] Difficulty score calculated with justification
 - [ ] Alternative diagnoses have plausibility levels
-- [ ] `annotation_draft.json` is written to disk before proceeding to Pass 2
-
-### Pass 2 (Step 5 Comparison)
-
-After reading step5 and generating comparison, verify:
-
-- [ ] No independent annotation fields were modified after reading step 5
-- [ ] `root_cause_agreement` accurately reflects the degree of alignment
-- [ ] Each discrepancy includes reasoning grounded in steps 1-4 evidence
-- [ ] `missed_by_judge` and `missed_by_step5` are honest (not empty by default)
-- [ ] `quality_score.overall` grade is consistent with the individual dimension scores
-- [ ] `compared_at` timestamp is after `annotated_at`
 
 ---

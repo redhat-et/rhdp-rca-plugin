@@ -65,32 +65,5 @@
       "confidence_distribution": {"high": 2, "medium": 1, "low": 0},
       "confidence_mode": "high"
     }
-  },
-
-  "step5_comparison": {
-    "compared_at": "2026-03-08T12:01:00Z",
-    "category_match": true,
-    "confidence_match": false,
-    "root_cause_agreement": "full | partial | none",
-    "discrepancies": [
-      {
-        "field": "root_cause.confidence",
-        "judge_value": "medium",
-        "step5_value": "high",
-        "reasoning": "Why the values differ based on raw evidence from steps 1-4."
-      }
-    ],
-    "missed_by_judge": [
-      "Evidence or insight that step 5 found but the judge did not."
-    ],
-    "missed_by_step5": [
-      "Evidence or insight that the judge found but step 5 did not."
-    ],
-    "quality_score": {
-      "diagnosis_accuracy": "correct | partial | incorrect",
-      "evidence_completeness": "complete | partial | incomplete",
-      "recommendation_quality": "good | adequate | poor",
-      "overall": "A | B | C | D | F"
-    }
   }
 }
