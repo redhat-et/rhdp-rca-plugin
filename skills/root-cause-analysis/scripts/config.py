@@ -45,6 +45,7 @@ class Config:
     github_token: str | None = None
     remote_host: str = ""
     remote_log_dir: str = ""
+    jumpbox_uri: str = ""
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Config":
@@ -80,6 +81,9 @@ class Config:
         # Remote log server settings (for --fetch), shared with logs-fetcher.
         remote_host = os.environ.get("REMOTE_HOST", "")
         remote_log_dir = os.environ.get("REMOTE_DIR", "")
+        
+        # Jumpbox URI for uploading analysis files
+        jumpbox_uri = os.environ.get("JUMPBOX_URI", "")
 
         return cls(
             splunk=splunk,
@@ -88,6 +92,7 @@ class Config:
             github_token=github_token,
             remote_host=remote_host,
             remote_log_dir=remote_log_dir,
+            jumpbox_uri=jumpbox_uri,
         )
 
     def find_job_log(self, job_id: str) -> Path | None:
