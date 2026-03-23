@@ -1,32 +1,44 @@
 ---
 name: rca-annotator
-description: Annotation with multi-pass consistency checks, difficulty calibration rubric, and complete evidence traceability for accurate ground-truth labels of root-cause-analysis outputs.
+description: LLM-as-judge skill that independently evaluates root-cause-analysis outputs to produce ground-truth annotations with multi-pass consistency checks, difficulty calibration, and complete evidence traceability.
 allowed-tools:
   - Read
   - Write
   - Bash
 ---
 
-# RCA Annotator
+# RCA Annotator (LLM-as-Judge)
 
-Create high-accuracy ground-truth annotations for root-cause-analysis outputs with optional multi-pass consistency validation and complete traceability.
+An **LLM-as-judge** skill that independently re-analyzes raw RCA evidence (step1, step3, step4 outputs) to produce ground-truth annotations. The judge does not read or evaluate the agent's diagnosis directly — it forms its own conclusion from the same source evidence the agent had access to, then the resulting annotation serves as a labeled reference for scoring agent accuracy.
 
-## Enhancements
+## Role: Judge vs Agent
 
-1. **Multi-Pass Consistency Checks** - Optional validation across multiple independent runs
-2. **Difficulty Calibration Rubric** - Objective 0-10 scoring system
-3. **Evidence Traceability Matrix** - Exact JSON paths, line numbers, and quotes
+| | `root-cause-analysis` (Agent) | `rca-annotator` (Judge) |
+|---|---|---|
+| **Purpose** | Diagnose failures for users | Produce ground-truth labels for evaluation |
+| **Reads** | Logs, Splunk, GitHub (live) | Step 1/3/4 output files (offline) |
+| **Output** | Human-readable diagnosis | Structured `annotation_draft.json` |
+| **Used by** | RHDP operators | Eval harness, benchmarking, dataset curation |
+
+The judge annotation can then be compared against the agent's diagnosis to measure precision, recall, and category accuracy.
+
+## Key Capabilities
+
+1. **Multi-Pass Consistency Checks** - Optional validation across multiple independent annotation passes
+2. **Difficulty Calibration Rubric** - Objective 0-10 scoring system for benchmarking
+3. **Evidence Traceability Matrix** - Exact JSON paths, line numbers, and quotes back to source files
 
 ## When to Use This Skill
 
 Use this skill when:
 - You have completed a root-cause-analysis for a job (steps 1-4 outputs exist)
-- You want to create labeled training/evaluation data
-- You need to assess the difficulty of diagnosing specific failures
-- You want to identify plausible alternative diagnoses (red herrings)
+- You want to create labeled ground-truth data for evaluating agent accuracy
+- You need to assess the difficulty of diagnosing specific failures for benchmarking
+- You want to identify plausible alternative diagnoses (red herrings) that could mislead an agent
 
 **DO NOT** use this skill to:
 - Perform the initial root cause analysis (use `root-cause-analysis` skill instead)
+- Directly evaluate or score an agent's output (use the annotation as a reference key, then compare externally)
 
 ## Prerequisites
 
@@ -46,13 +58,15 @@ If required files are missing, run `root-cause-analysis` skill first.
 
 ## How It Works
 
+The judge forms an independent diagnosis from the same raw evidence the agent used, without seeing the agent's conclusions. This avoids anchoring bias and produces an unbiased reference label.
+
 **Workflow**:
 1. Validate `.analysis/<job_id>/` directory exists with required files
-2. Read step1, step3, step4 outputs
-3. Perform analysis with enhanced evidence scoring
-4. **OPTIONAL**: Run multi-pass consistency check
-5. Generate annotation with root cause, evidence (with strength/confidence), difficulty score, recommendations, and alternatives
-6. **Write** `annotation_draft.json` to disk
+2. Read step1, step3, step4 outputs (raw evidence only — never the agent's diagnosis)
+3. Independently determine root cause with evidence scoring and traceability
+4. **OPTIONAL**: Run multi-pass consistency check to validate judge reliability
+5. Generate annotation with root cause, evidence (with confidence), difficulty score, recommendations, and alternatives
+6. **Write** `annotation_draft.json` to disk as the ground-truth reference
 
 ---
 
