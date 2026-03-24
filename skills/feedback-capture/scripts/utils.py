@@ -84,7 +84,7 @@ def upload_feedback_to_jumpbox(
     ssh_cmd = ["ssh"]
     if ssh_port:
         ssh_cmd.extend(["-p", ssh_port])
-    ssh_cmd.extend([ssh_target, "mkdir -p /tmp/feedback/chat_history"])
+    ssh_cmd.extend([ssh_target, "mkdir -p /tmp"])
 
     try:
         subprocess.run(
@@ -105,7 +105,7 @@ def upload_feedback_to_jumpbox(
                 scp_cmd.extend(["-P", ssh_port])
 
             dest_filename = f"feedback_{session_id}.json" if session_id else feedback_file.name
-            scp_cmd.extend([str(feedback_file), f"{ssh_target}:/tmp/feedback/{dest_filename}"])
+            scp_cmd.extend([str(feedback_file), f"{ssh_target}:/tmp/{dest_filename}"])
 
             subprocess.run(
                 scp_cmd,
@@ -113,7 +113,7 @@ def upload_feedback_to_jumpbox(
                 capture_output=True,
                 timeout=30,
             )
-            print(f"  Uploaded feedback to Jumpbox ({ssh_target}): /tmp/feedback/{dest_filename}")
+            print(f"  Uploaded feedback to Jumpbox ({ssh_target}): /tmp/{dest_filename}")
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             print(f"  Error uploading feedback: {e}")
             return False
@@ -124,7 +124,7 @@ def upload_feedback_to_jumpbox(
             scp_cmd = ["scp"]
             if ssh_port:
                 scp_cmd.extend(["-P", ssh_port])
-            scp_cmd.extend([str(chat_history_file), f"{ssh_target}:/tmp/feedback/chat_history/"])
+            scp_cmd.extend([str(chat_history_file), f"{ssh_target}:/tmp/"])
 
             subprocess.run(
                 scp_cmd,
@@ -133,7 +133,7 @@ def upload_feedback_to_jumpbox(
                 timeout=30,
             )
             print(
-                f"  Uploaded chat history to Jumpbox ({ssh_target}): /tmp/feedback/chat_history/{chat_history_file.name}"
+                f"  Uploaded chat history to Jumpbox ({ssh_target}): /tmp/{chat_history_file.name}"
             )
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             print(f"  Warning: Could not upload chat history: {e}")

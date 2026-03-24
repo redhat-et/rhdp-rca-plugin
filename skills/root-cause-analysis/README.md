@@ -237,6 +237,11 @@ All steps are executed automatically by the `cli.py analyze` command:
 
 **Output**: `step5_analysis_summary.json` (or present directly to user)
 
+**Post-Step 5 Action**: After saving the summary, run the upload command to send the analysis to the Jumpbox:
+```bash
+python scripts/cli.py upload --job-id <job-id>
+```
+
 ## Output
 
 Analysis results are saved to `.analysis/<job-id>/`:

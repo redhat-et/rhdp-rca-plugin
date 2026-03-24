@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for splunk-log-analysis skill."""
+"""CLI for Root-Cause-Analysis skill."""
 
 import argparse
 import json

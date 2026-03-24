@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CLI for splunk-log-analysis skill."""
+"""CLI for Root-Cause-Analysis skill."""
 
 import argparse
 import json
@@ -46,17 +46,29 @@ def save_step(analysis_dir: Path, step: int, data: dict) -> Path:
     return output_path
 
 
-def upload_analysis_to_jumpbox(analysis_dir: Path, config: Config) -> bool:
-    """Upload analysis directory to Jumpbox in analysis/{job_id}/ with session.json."""
+@trace(name="Upload analysis", span_type=SpanType.CHAIN if SpanType else None)
+def upload_analysis_to_jumpbox(args: argparse.Namespace, config: Config, span=None) -> int:
+    """Upload analysis directory to Jumpbox in /tmp/{job_id}/ with session.json."""
+    analysis_dir = config.analysis_dir / args.job_id
+
+    if not analysis_dir.exists():
+        error_message = f"No analysis found for job {args.job_id}"
+        print(error_message)
+        if span:
+            span.set_outputs({"error": error_message})
+        return 1
+
+    print(f"Uploading analysis for job {args.job_id}...")
+
     if not config.jumpbox_uri:
         print("  Skipping upload: JUMPBOX_URI not configured")
-        return False
+        return 1
 
     # Parse JUMPBOX_URI format: "user@host -p port"
     parts = config.jumpbox_uri.split()
     if len(parts) < 1:
         print("  Error: Invalid JUMPBOX_URI format")
-        return False
+        return 1
 
     ssh_target = parts[0]  # user@host
     ssh_port = None
@@ -71,14 +83,14 @@ def upload_analysis_to_jumpbox(analysis_dir: Path, config: Config) -> bool:
             pass
 
     session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
-    job_id = analysis_dir.name
-    remote_base_dir = "/tmp/analysis"
+    job_id = args.job_id
+    remote_base_dir = f"/tmp/{job_id}"
 
     # Create session.json file locally (will be overwritten if exists)
     session_file = analysis_dir / "session.json"
     try:
         with open(session_file, "w") as f:
-            json.dump({"session_id": session_id}, f, indent=2)
+            json.dump({"session_id": session_id, "job_id": job_id}, f, indent=2)
     except Exception as e:
         print(f"  Warning: Could not create session.json: {e}")
 
@@ -98,25 +110,32 @@ def upload_analysis_to_jumpbox(analysis_dir: Path, config: Config) -> bool:
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(f"  Error creating remote directory: {e}")
-        return False
+        return 1
 
-    # Upload analysis directory using rsync
+    # Upload analysis directory contents using rsync
     try:
         rsync_cmd = ["rsync"]
         if ssh_port:
             rsync_cmd.extend(["-e", f"ssh -p {ssh_port}"])
-        rsync_cmd.extend(["-az", "--quiet", str(analysis_dir), f"{ssh_target}:{remote_base_dir}/"])
+        # Add trailing slash to source to copy contents, not the directory itself
+        rsync_cmd.extend(
+            ["-az", "--quiet", f"{str(analysis_dir)}/", f"{ssh_target}:{remote_base_dir}/"]
+        )
 
         subprocess.run(
             rsync_cmd,
             check=True,
             timeout=60,
         )
-        print(f"  Uploaded to Jumpbox ({ssh_target}): {remote_base_dir}/{job_id}/")
-        return True
+        print(f"  Uploaded to Jumpbox ({ssh_target}): {remote_base_dir}/")
+        if span:
+            span.set_outputs({"job_id": job_id, "success": True})
+        return 0
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(f"  Error uploading to Jumpbox: {e}")
-        return False
+        if span:
+            span.set_outputs({"job_id": job_id, "success": False, "error": str(e)})
+        return 1
 
 
 def get_step_name(step: int) -> str:
@@ -344,10 +363,6 @@ def cmd_analyze(args: argparse.Namespace, config: Config, span=None) -> int:
         print("-" * 60)
         _print_quick_summary(job_context, splunk_logs, correlation)
 
-    # Upload analysis to Jumpbox
-    print("\n[Upload] Uploading analysis to Jumpbox...")
-    upload_success = upload_analysis_to_jumpbox(analysis_dir, config)
-
     outputs = {
         "job_id": job_id,
         "status": job_context.get("status"),
@@ -355,7 +370,6 @@ def cmd_analyze(args: argparse.Namespace, config: Config, span=None) -> int:
         "failed_tasks": len(job_context.get("failed_tasks", [])),
         "pods_found": len(splunk_logs.get("pods_found", [])),
         "analysis_dir": str(analysis_dir),
-        "uploaded_to_jumpbox": upload_success,
     }
     if span:
         span.set_outputs(outputs)
@@ -565,6 +579,10 @@ def main() -> int:
     status_parser = subparsers.add_parser("status", help="Show analysis status")
     status_parser.add_argument("job_id", help="Job ID to check")
 
+    # upload command
+    upload_parser = subparsers.add_parser("upload", help="Upload analysis to Jumpbox")
+    upload_parser.add_argument("--job-id", required=True, help="Job ID to upload")
+
     args = parser.parse_args()
 
     # Load config
@@ -596,6 +614,7 @@ def main() -> int:
         "query": cmd_query,
         "setup": cmd_setup,
         "status": cmd_status,
+        "upload": upload_analysis_to_jumpbox,
     }
 
     exit_code = commands[args.command](args, config, span)

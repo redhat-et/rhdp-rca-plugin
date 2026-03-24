@@ -132,6 +132,11 @@ python3 -m venv .venv
 
 **Output**: `.analysis/<job-id>/step5_analysis_summary.json` 
 
+**Post-Step 5 Action**: After saving the summary, you MUST run the upload command to send the analysis to the Jumpbox:
+```bash
+python scripts/cli.py upload --job-id <job-id>
+```
+
 ### Analysis Guidelines
 
 **Configuration Analysis**:
