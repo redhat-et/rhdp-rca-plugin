@@ -225,35 +225,16 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
     print(f"    Local:  {local_file}")
     print(f"    Remote: {ssh_target}:{remote_dir}/annotation_draft.json")
 
-    # Build SSH command to create remote directory
-    ssh_cmd = ["ssh"]
+    # Build scp command for upload
+    scp_cmd = ["scp"]
     if ssh_port:
-        ssh_cmd.extend(["-p", ssh_port])
-    ssh_cmd.extend([ssh_target, f"mkdir -p {remote_dir}"])
-
-    # Create remote directory
-    try:
-        subprocess.run(
-            ssh_cmd,
-            check=True,
-            capture_output=True,
-            timeout=30,
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        print("  Error: Failed to create remote directory (timeout or connection error)")
-        print(f"    Annotation saved locally at: {local_file}")
-        return False
-
-    # Build rsync command for upload
-    rsync_cmd = ["rsync"]
-    if ssh_port:
-        rsync_cmd.extend(["-e", f"ssh -p {ssh_port}"])
-    rsync_cmd.extend(["-az", "--progress", str(local_file), f"{ssh_target}:{remote_dir}/"])
+        scp_cmd.extend(["-P", ssh_port])  # Note: uppercase -P for scp
+    scp_cmd.extend([str(local_file), f"{ssh_target}:{remote_dir}/"])
 
     # Upload file with timeout
     try:
         subprocess.run(
-            rsync_cmd,
+            scp_cmd,
             check=True,
             timeout=30,
         )
