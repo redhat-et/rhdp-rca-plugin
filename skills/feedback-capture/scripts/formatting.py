@@ -78,7 +78,7 @@ def main():
                 feedback_entries = json.load(f)
                 if not isinstance(feedback_entries, list):
                     feedback_entries = []
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             print(f"Warning: Could not read existing feedback.json: {e}")
             feedback_entries = []
 

@@ -16,6 +16,7 @@ if __name__ == "__main__" and __package__ is None:
     from scripts.correlator import build_correlation_timeline, fetch_correlated_logs
     from scripts.job_parser import parse_job_log
     from scripts.log_fetcher import fetch_job_log
+    from scripts.setup import print_checks, run_checks
     from scripts.step4_fetch_github import GitHubClient, Step4Analyzer
     from scripts.tracing import HAS_MLFLOW, SpanType, mlflow, trace
 else:
@@ -24,6 +25,7 @@ else:
     from .correlator import build_correlation_timeline, fetch_correlated_logs
     from .job_parser import parse_job_log
     from .log_fetcher import fetch_job_log
+    from .setup import print_checks, run_checks
     from .step4_fetch_github import GitHubClient, Step4Analyzer
     from .tracing import HAS_MLFLOW, SpanType, mlflow, trace
 
@@ -115,6 +117,7 @@ def upload_analysis_to_jumpbox(analysis_dir: Path, config: Config) -> bool:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         print(f"  Error uploading to Jumpbox: {e}")
         return False
+
 
 def get_step_name(step: int) -> str:
     """Get descriptive name for step."""
@@ -219,13 +222,13 @@ def cmd_analyze(args: argparse.Namespace, config: Config, span=None) -> int:
         return 1
 
     # Validate Splunk config
-    errors = config.validate_splunk()
-    if errors:
-        error_message = f"Splunk configuration invalid: {', '.join(errors)}"
-        print(f"Error: {error_message}")
-        if span:
-            span.set_outputs({"error": error_message})
-        return 1
+    splunk_errors = config.validate_splunk()
+    if splunk_errors:
+        print(f"Warning: Splunk configuration invalid: {', '.join(splunk_errors)}")
+        print(
+            "  Step 2 (Splunk log fetch) will be skipped. Set SPLUNK_HOST/SPLUNK_USERNAME/SPLUNK_PASSWORD in .claude/settings.json to enable."
+        )
+    skip_splunk = bool(splunk_errors)
 
     # GitHub token validation will be done at Step 4 (where it's actually needed)
     github_errors = config.validate_github()
@@ -256,17 +259,31 @@ def cmd_analyze(args: argparse.Namespace, config: Config, span=None) -> int:
 
     # Step 2: Fetch Splunk logs
     print("\n[Step 2] Fetching Splunk logs...")
-    try:
-        splunk_logs = fetch_correlated_logs(config, job_context)
-        step2_path = save_step(analysis_dir, 2, splunk_logs)
-        print(f"  OCP logs: {len(splunk_logs.get('ocp_logs', []))}")
-        print(f"  Error logs: {len(splunk_logs.get('error_logs', []))}")
-        print(f"  Pods found: {len(splunk_logs.get('pods_found', []))}")
-        print(f"  Output: {step2_path}")
-    except Exception as e:
-        print(f"  Error fetching Splunk logs: {e}")
-        splunk_logs = {"ocp_logs": [], "error_logs": [], "pods_found": [], "errors": [str(e)]}
+    if skip_splunk:
+        print("  Skipped: Splunk not configured")
+        splunk_logs = {
+            "ocp_logs": [],
+            "error_logs": [],
+            "pods_found": [],
+            "skipped": True,
+            "reason": "Splunk not configured",
+        }
         save_step(analysis_dir, 2, splunk_logs)
+    else:
+        try:
+            splunk_logs = fetch_correlated_logs(config, job_context)
+            step2_path = save_step(analysis_dir, 2, splunk_logs)
+            ocp_logs = splunk_logs.get("ocp_logs", [])
+            error_logs = splunk_logs.get("error_logs", [])
+            pods_found = splunk_logs.get("pods_found", [])
+            print(f"  OCP logs: {len(ocp_logs) if isinstance(ocp_logs, list) else 0}")
+            print(f"  Error logs: {len(error_logs) if isinstance(error_logs, list) else 0}")
+            print(f"  Pods found: {len(pods_found) if isinstance(pods_found, list) else 0}")
+            print(f"  Output: {step2_path}")
+        except Exception as e:
+            print(f"  Error fetching Splunk logs: {e}")
+            splunk_logs = {"ocp_logs": [], "error_logs": [], "pods_found": [], "errors": [str(e)]}
+            save_step(analysis_dir, 2, splunk_logs)
 
     # Step 3: Build correlation
     print("\n[Step 3] Building correlation timeline...")
@@ -447,6 +464,20 @@ def cmd_query(args: argparse.Namespace, config: Config, span=None) -> int:
     return 0
 
 
+def cmd_setup(args: argparse.Namespace, config: Config, span=None) -> int:
+    """Run preflight checks for all prerequisites."""
+    base_dir = Path(__file__).parent.parent
+    repo_root = base_dir.parent.parent  # skills/ -> repo root
+    results = run_checks(base_dir, repo_root)
+
+    if getattr(args, "json", False):
+        print(json.dumps(results, indent=2))
+        return 0 if all(r["status"] == "ok" for r in results) else 1
+
+    issues = print_checks(results)
+    return 0 if issues == 0 else 1
+
+
 def cmd_status(args: argparse.Namespace, config: Config, span=None) -> int:
     """Show analysis status for a job."""
     analysis_dir = config.analysis_dir / args.job_id
@@ -526,6 +557,10 @@ def main() -> int:
     )
     query_parser.add_argument("--output", "-o", help="Output file (default: print summary)")
 
+    # setup command
+    setup_parser = subparsers.add_parser("setup", help="Check prerequisites and configuration")
+    setup_parser.add_argument("--json", action="store_true", help="Output results as JSON")
+
     # status command
     status_parser = subparsers.add_parser("status", help="Show analysis status")
     status_parser.add_argument("job_id", help="Job ID to check")
@@ -559,6 +594,7 @@ def main() -> int:
         "analyze": cmd_analyze,
         "parse": cmd_parse,
         "query": cmd_query,
+        "setup": cmd_setup,
         "status": cmd_status,
     }
 

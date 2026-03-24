@@ -148,13 +148,15 @@ Step 5   [Claude]  Analyze and summarize root cause
 - Troubleshoot Kubernetes/OpenShift problems
 
 **[View detailed documentation →](./skills/root-cause-analysis/README.md)**
+
 ---
+
 ```json
 {
   "env": {
-    "REMOTE_HOST":"<remote-host>",
+    "REMOTE_HOST": "<remote-host>",
     "REMOTE_DIR": "<remote-dir>",
-    "DEFAULT_LOCAL_DIR":"Path.home() / "aiops_extracted_logs"",
+    "DEFAULT_LOCAL_DIR": "<path-to-local-extracted-logs>",
     "JOB_LOGS_DIR": "/path/to/your/extracted_logs",
     "SPLUNK_HOST": "<your-remote-splunk>",
     "SPLUNK_USERNAME": "your-username",

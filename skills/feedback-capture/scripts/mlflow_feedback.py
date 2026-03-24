@@ -86,18 +86,18 @@ def main() -> int:
         "summary": args.context,  # MLflow uses "summary" field
         "chat_history_file": chat_history_json_filename,
         "user": os.environ.get("MLFLOW_TAG_USER", os.environ.get("USER", "unknown")),
-        "source": "feedback-capture"
+        "source": "feedback-capture",
     }
 
     # Load existing feedback entries or create new list
     feedback_entries = []
     if feedback_json_filepath.exists():
         try:
-            with open(feedback_json_filepath, "r") as f:
+            with open(feedback_json_filepath) as f:
                 feedback_entries = json.load(f)
                 if not isinstance(feedback_entries, list):
                     feedback_entries = []
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             print(f"Warning: Could not read existing feedback.json: {e}")
             feedback_entries = []
 

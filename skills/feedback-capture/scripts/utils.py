@@ -52,7 +52,9 @@ def get_chat_history_jsonl_path(session_id=None):
         return None
 
 
-def upload_feedback_to_jumpbox(feedback_file: Path, chat_history_file: Path, session_id: str | None = None) -> bool:
+def upload_feedback_to_jumpbox(
+    feedback_file: Path, chat_history_file: Path, session_id: str | None = None
+) -> bool:
     """Upload feedback.json and chat history to Jumpbox."""
     jumpbox_uri = os.environ.get("JUMPBOX_URI", "")
 
@@ -101,7 +103,7 @@ def upload_feedback_to_jumpbox(feedback_file: Path, chat_history_file: Path, ses
             scp_cmd = ["scp"]
             if ssh_port:
                 scp_cmd.extend(["-P", ssh_port])
-                
+
             dest_filename = f"feedback_{session_id}.json" if session_id else feedback_file.name
             scp_cmd.extend([str(feedback_file), f"{ssh_target}:/tmp/feedback/{dest_filename}"])
 
