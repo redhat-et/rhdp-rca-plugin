@@ -12,7 +12,6 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
 
 from jumpbox_io import download_from_jumpbox, upload_to_jumpbox
 
@@ -33,7 +32,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"\n Analysis files ready at .analysis/{args.job_id}/")
         return 0
     else:
-        print(f"\n Failed to download analysis files")
+        print("\n Failed to download analysis files")
         print("  Check JUMPBOX_URI environment variable and SSH configuration")
         return 1
 
@@ -51,10 +50,10 @@ def cmd_upload(args: argparse.Namespace) -> int:
     print(f"Uploading annotation for job {args.job_id}...")
 
     if upload_to_jumpbox(args.job_id):
-        print(f"\n Annotation uploaded successfully")
+        print("\n Annotation uploaded successfully")
         return 0
     else:
-        print(f"\n Failed to upload annotation")
+        print("\n Failed to upload annotation")
         return 1
 
 

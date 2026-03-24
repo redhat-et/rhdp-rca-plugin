@@ -138,7 +138,9 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
             timeout=30,
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        print(f"  Error: Remote directory does not exist or connection failed: {ssh_target}:{remote_dir}")
+        print(
+            f"  Error: Remote directory does not exist or connection failed: {ssh_target}:{remote_dir}"
+        )
         if isinstance(e, subprocess.CalledProcessError) and e.stderr:
             print(f"    Details: {e.stderr.decode().strip()}")
         return False
@@ -159,7 +161,7 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
             check=True,
             timeout=60,
         )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         print("  Error: Failed to download files from jumpbox (timeout or connection error)")
         return False
 
@@ -237,7 +239,7 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
             capture_output=True,
             timeout=30,
         )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         print("  Error: Failed to create remote directory (timeout or connection error)")
         print(f"    Annotation saved locally at: {local_file}")
         return False
@@ -255,7 +257,7 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
             check=True,
             timeout=30,
         )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         print("  Error: Failed to upload annotation to jumpbox (timeout or connection error)")
         print(f"    Annotation saved locally at: {local_file}")
         return False
