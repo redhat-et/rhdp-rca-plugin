@@ -61,9 +61,16 @@ If any checks have `"status": "missing"` and `"configurable": true`, offer to he
      - Then set `REMOTE_HOST` to the alias name
 4. After collecting all values, read the project's `.claude/settings.json` file
 5. Merge the new values into the `"env"` block (create it if it doesn't exist)
-6. Write the updated settings file
-7. Tell the user to **restart the Claude Code session** for env vars to take effect
-8. **Important**: Write secrets (tokens, passwords) to `.claude/settings.json` -- ensure this file is in `.gitignore`
+6. If MLflow env vars were configured (MLFLOW_PORT, MLFLOW_EXPERIMENT_NAME), also add the required MLflow hooks to the `"hooks"` block (create it if it doesn't exist):
+   ```json
+   "hooks": {
+     "Stop": [{ "hooks": [{ "type": "command", "command": "python -c \"from mlflow.claude_code.hooks import stop_hook_handler; stop_hook_handler()\"" }] }],
+     "SessionStart": [{ "hooks": [{ "type": "command", "command": "INPUT=$(cat); SESSION_ID=$(echo \"$INPUT\" | jq -r '.session_id'); echo \"export CLAUDE_SESSION_ID='$SESSION_ID'\" >> \"$CLAUDE_ENV_FILE\"" }] }]
+   }
+   ```
+7. Write the updated settings file
+8. Tell the user to **restart the Claude Code session** for env vars and hooks to take effect
+9. **Important**: Write secrets (tokens, passwords) to `.claude/settings.json` -- ensure this file is in `.gitignore`
 
 If checks show non-configurable errors (e.g., venv issues, rsync not found), provide the fix command instead.
 

@@ -176,13 +176,22 @@ Step 5   [Claude]  Analyze and summarize root cause
 ```json
 {
   "hooks": {
-    "SessionStart": [
+    "Stop": [
       {
-        "matcher": "*",
-        "hooks": [   
+        "hooks": [
           {
             "type": "command",
-            "command": "./.claude/hooks/session-start.sh"
+            "command": "python -c \"from mlflow.claude_code.hooks import stop_hook_handler; stop_hook_handler()\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); SESSION_ID=$(echo \"$INPUT\" | jq -r '.session_id'); echo \"export CLAUDE_SESSION_ID='$SESSION_ID'\" >> \"$CLAUDE_ENV_FILE\""
           }
         ]
       }
@@ -190,8 +199,7 @@ Step 5   [Claude]  Analyze and summarize root cause
   }
 }
 ```
----
-**Note:** Run the following to make the script executable: `chmod +x ./.claude/hooks/session-start.sh`
+**Note:** These hooks are required for MLflow tracing. The `Stop` hook flushes traces and the `SessionStart` hook captures the session ID.
 
 ### context-fetcher
 
@@ -366,17 +374,29 @@ Add the following environment variables to your Claude settings file at `~/.clau
 **Note**: Replace `<your-username>@<your-jumpbox> -p <port>` with your actual jumpbox connection details.
 Replace `<experiment-name>` to a experiment name to the desired experiment name. This will automatically create the experiment for you if it does not exist.
 
-### Step 3: Add hooks SessionStart to hooks in .claude/settings.json
+### Step 3: Add MLflow hooks to `.claude/settings.json`
+
+Add both `Stop` and `SessionStart` hooks to your settings:
+
 ```json
 {
   "hooks": {
-    "SessionStart": [
+    "Stop": [
       {
-        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/session-start.sh"
+            "command": "python -c \"from mlflow.claude_code.hooks import stop_hook_handler; stop_hook_handler()\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); SESSION_ID=$(echo \"$INPUT\" | jq -r '.session_id'); echo \"export CLAUDE_SESSION_ID='$SESSION_ID'\" >> \"$CLAUDE_ENV_FILE\""
           }
         ]
       }
@@ -385,10 +405,8 @@ Replace `<experiment-name>` to a experiment name to the desired experiment name.
 }
 ```
 
-Make the script executable:
-```bash
-chmod +x ./.claude/hooks/session-start.sh
-```
+- **Stop hook**: Flushes MLflow traces when Claude stops
+- **SessionStart hook**: Captures the session ID for trace correlation
 
 ### Step 4: cd into AIOPS-SKILLS/ dir (where claude will be running)
 

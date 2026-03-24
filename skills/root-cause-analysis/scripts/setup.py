@@ -507,17 +507,8 @@ def check_mlflow_server() -> dict:
     }
 
 
-def check_session_hook(repo_root: Path) -> dict:
-    """Check if session-start hook is configured."""
-    hook_path = repo_root / ".claude" / "hooks" / "session-start.sh"
-    if not hook_path.exists():
-        return {
-            "name": "Session hook",
-            "status": "missing",
-            "message": ".claude/hooks/session-start.sh not found",
-        }
-
-    # Check if settings.json has the SessionStart hook registered
+def check_mlflow_hooks(repo_root: Path) -> dict:
+    """Check if MLflow Stop and SessionStart hooks are configured in settings.json."""
     for settings_name in ["settings.json", "settings.local.json"]:
         settings_path = repo_root / ".claude" / settings_name
         if settings_path.exists():
@@ -525,19 +516,31 @@ def check_session_hook(repo_root: Path) -> dict:
                 with open(settings_path) as f:
                     settings = json.load(f)
                 hooks = settings.get("hooks", {})
-                if "SessionStart" in hooks:
+                has_stop = "Stop" in hooks
+                has_session = "SessionStart" in hooks
+                if has_stop and has_session:
                     return {
-                        "name": "Session hook",
+                        "name": "MLflow hooks",
                         "status": "ok",
-                        "message": f"registered in {settings_name}",
+                        "message": f"Stop + SessionStart registered in {settings_name}",
                     }
+                missing = []
+                if not has_stop:
+                    missing.append("Stop")
+                if not has_session:
+                    missing.append("SessionStart")
+                return {
+                    "name": "MLflow hooks",
+                    "status": "missing",
+                    "message": f"Missing hooks: {', '.join(missing)}. See settings.example.json",
+                }
             except (json.JSONDecodeError, OSError):
                 pass
 
     return {
-        "name": "Session hook",
+        "name": "MLflow hooks",
         "status": "missing",
-        "message": "SessionStart hook not registered in settings. See settings.example.json",
+        "message": "Stop and SessionStart hooks not found in settings. See settings.example.json",
     }
 
 
@@ -556,7 +559,7 @@ def run_checks(base_dir: Path, repo_root: Path | None = None) -> list[dict]:
         check_github_mcp(repo_root),
         check_mlflow(),
         check_mlflow_server(),
-        check_session_hook(repo_root),
+        check_mlflow_hooks(repo_root),
     ]
 
 
