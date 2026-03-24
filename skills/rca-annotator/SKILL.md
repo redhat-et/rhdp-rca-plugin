@@ -42,17 +42,22 @@ Use this skill when:
 
 ## Prerequisites
 
-Before running this skill, verify that root-cause-analysis has been completed:
+Before running this skill, verify that root-cause-analysis has been completed.
 
-```bash
-# Check that analysis directory exists
-ls -la .analysis/<job_id>/
+**Environment Variables** (optional):
+- `JUMPBOX_URI` - SSH connection string for jumpbox access
+  - Format: `"user@host -p port"` or `"user@host"` (default port 22)
+  - Example: `"deploy@jumpbox.example.com -p 2222"`
+  - If not set, uses local `.analysis/` directory only
 
-# Required files
-# step1_job_context.json       ← Job metadata, failed tasks
-# step3_correlation.json        ← Timeline with AAP + Splunk events
-# step4_github_fetch_history.json ← Configuration and code context
-```
+**SSH Configuration** (if using jumpbox):
+- SSH keys configured in `~/.ssh/config` for passwordless access
+- System dependencies: `ssh`, `rsync` installed
+
+**Required Files**:
+- `step1_job_context.json` - Job metadata, failed tasks
+- `step3_correlation.json` - Timeline with AAP + Splunk events
+- `step4_github_fetch_history.json` - Configuration and code context
 
 If required files are missing, run `root-cause-analysis` skill first.
 
@@ -61,12 +66,52 @@ If required files are missing, run `root-cause-analysis` skill first.
 The judge forms an independent diagnosis from the same raw evidence the agent used, without seeing the agent's conclusions. This avoids anchoring bias and produces an unbiased reference label.
 
 **Workflow**:
+0. **Download** analysis files from jumpbox (if `JUMPBOX_URI` set) or verify local files exist
 1. Validate `.analysis/<job_id>/` directory exists with required files
 2. Read step1, step3, step4 outputs (raw evidence only — never the agent's diagnosis)
 3. Independently determine root cause with evidence scoring and traceability
 4. **OPTIONAL**: Run multi-pass consistency check to validate judge reliability
 5. Generate annotation with root cause, evidence (with confidence), difficulty score, recommendations, and alternatives
 6. **Write** `annotation_draft.json` to disk as the ground-truth reference
+7. **Upload** `annotation_draft.json` to jumpbox (if `JUMPBOX_URI` set)
+
+---
+
+## Step 0: Download Analysis Files from Jumpbox
+
+Before reading analysis files, download them from jumpbox if configured.
+
+**Download Command**:
+```bash
+cd skills/rca-annotator
+python scripts/cli.py download --job-id <job_id>
+```
+
+**What this does**:
+1. Checks if `JUMPBOX_URI` environment variable is set
+2. If set: Downloads `/tmp/analysis/<job_id>/` from jumpbox to local `.analysis/<job_id>/`
+3. If not set: Verifies local `.analysis/<job_id>/` exists and has required files
+4. Validates that required files exist (step1, step3, step4 JSON files)
+
+**Error Handling**:
+- If `JUMPBOX_URI` not set: Uses local files only (backward compatible)
+- If remote directory missing: "Error: Remote directory does not exist or connection failed"
+- If required files missing: Lists specific missing files
+- If connection fails: "Failed to download files from jumpbox (timeout or connection error)"
+
+**Success Output**:
+```
+Downloading analysis files for job 1234567...
+  Downloading analysis files from jumpbox...
+    Remote: user@jumpbox:/tmp/analysis/1234567/
+    Local:  .analysis/1234567/
+   Analysis files downloaded successfully
+    Location: .analysis/1234567/
+
+ Analysis files ready at .analysis/1234567/
+```
+
+Once files are downloaded and verified, proceed to Step 1.
 
 ---
 
@@ -74,20 +119,12 @@ The judge forms an independent diagnosis from the same raw evidence the agent us
 
 ### File Verification
 
+Files have already been verified in Step 0. You can proceed directly to reading them.
+
+If you skipped Step 0 (local mode only), verify files exist:
 ```bash
-# List analysis files
 ls -la .analysis/<job_id>/
-
-# Verify required files exist
-test -f .analysis/<job_id>/step1_job_context.json && \
-test -f .analysis/<job_id>/step3_correlation.json && \
-test -f .analysis/<job_id>/step4_github_fetch_history.json && \
-echo "All required files present" || echo "ERROR: Missing required files"
 ```
-
-**Error Handling**:
-- If directory doesn't exist: "Run root-cause-analysis skill first for job <job_id>"
-- If files missing: List which files are missing and provide guidance
 
 ### Reading Order
 
@@ -311,9 +348,50 @@ Write `annotation_draft.json` to disk with complete schema (see Output Format be
 
 ---
 
+## Step 4: Upload Annotation to Jumpbox
+
+After writing `annotation_draft.json` locally, upload it to jumpbox if configured.
+
+**Upload Command**:
+```bash
+cd skills/rca-annotator
+python scripts/cli.py upload --job-id <job_id>
+```
+
+**What this does**:
+1. Verifies `annotation_draft.json` exists locally at `.analysis/<job_id>/`
+2. If `JUMPBOX_URI` is set: Uploads to `/tmp/analysis/<job_id>/annotation_draft.json` on jumpbox
+3. If `JUMPBOX_URI` not set: Skips upload, file remains local only
+4. Always keeps local copy as backup
+
+**Error Handling**:
+- If local file missing: "Error: Local annotation file not found"
+- If `JUMPBOX_URI` not set: "JUMPBOX_URI not set. Annotation saved locally only"
+- If connection fails: "Error: Failed to upload annotation to jumpbox"
+- Even if upload fails, local copy is preserved
+
+**Success Output**:
+```
+Uploading annotation for job 1234567...
+  Uploading annotation to jumpbox...
+    Local:  .analysis/1234567/annotation_draft.json
+    Remote: user@jumpbox:/tmp/analysis/1234567/annotation_draft.json
+   Annotation uploaded successfully
+    Remote location: user@jumpbox:/tmp/analysis/1234567/annotation_draft.json
+    Local backup: .analysis/1234567/annotation_draft.json
+
+ Annotation uploaded successfully
+```
+
+**Important**: The local copy at `.analysis/<job_id>/annotation_draft.json` is always preserved, even if upload fails. This ensures annotations are never lost.
+
+---
+
 ## Output Format
 
-Save annotation to `.analysis/<job_id>/annotation_draft.json` following this schema:
+Save annotation locally to `.analysis/<job_id>/annotation_draft.json` following this schema.
+
+After writing locally (Step 3), the file will be automatically uploaded to the jumpbox at `/tmp/analysis/<job_id>/annotation_draft.json` (Step 4) if `JUMPBOX_URI` is configured.
 
 ```json
 {
