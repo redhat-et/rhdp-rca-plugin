@@ -117,33 +117,37 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
         print(f"  Error: {e}")
         return False
 
-    remote_dir = f"/tmp/analysis/{job_id}"
+    remote_candidates = [f"/tmp/analysis/{job_id}", f"/tmp/{job_id}"]
+    remote_dir = None
+
+    for candidate in remote_candidates:
+        ssh_cmd = ["ssh"]
+        if ssh_port:
+            ssh_cmd.extend(["-p", ssh_port])
+        ssh_cmd.extend([ssh_target, f"test -d {candidate}"])
+
+        try:
+            subprocess.run(
+                ssh_cmd,
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+            remote_dir = candidate
+            break
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+
+    if remote_dir is None:
+        paths_tried = ", ".join(f"{ssh_target}:{c}" for c in remote_candidates)
+        print(
+            f"  Error: Remote directory does not exist or connection failed. Tried: {paths_tried}"
+        )
+        return False
 
     print("  Downloading analysis files from jumpbox...")
     print(f"    Remote: {ssh_target}:{remote_dir}/")
     print(f"    Local:  {analysis_dir}/")
-
-    # Build SSH command to check remote directory exists
-    ssh_cmd = ["ssh"]
-    if ssh_port:
-        ssh_cmd.extend(["-p", ssh_port])
-    ssh_cmd.extend([ssh_target, f"test -d {remote_dir}"])
-
-    # Check if remote directory exists
-    try:
-        subprocess.run(
-            ssh_cmd,
-            check=True,
-            capture_output=True,
-            timeout=30,
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        print(
-            f"  Error: Remote directory does not exist or connection failed: {ssh_target}:{remote_dir}"
-        )
-        if isinstance(e, subprocess.CalledProcessError) and e.stderr:
-            print(f"    Details: {e.stderr.decode().strip()}")
-        return False
 
     # Create local directory
     analysis_dir.mkdir(parents=True, exist_ok=True)
@@ -181,7 +185,10 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
 
 def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
     """
-    Upload annotation_draft.json to jumpbox at /tmp/analysis/<job_id>/.
+    Upload annotation_draft.json to jumpbox at /tmp/analysis/<job_id>/ or /tmp/<job_id>/.
+
+    Checks which remote directory exists and uploads there. Falls back to
+    /tmp/analysis/<job_id>/ if neither exists yet.
 
     Args:
         job_id: Job ID to upload annotation for
@@ -219,16 +226,38 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
         print(f"   Annotation saved locally at: {local_file}")
         return False
 
-    remote_dir = f"/tmp/analysis/{job_id}"
+    remote_candidates = [f"/tmp/analysis/{job_id}", f"/tmp/{job_id}"]
+    remote_dir = None
+
+    for candidate in remote_candidates:
+        ssh_cmd = ["ssh"]
+        if ssh_port:
+            ssh_cmd.extend(["-p", ssh_port])
+        ssh_cmd.extend([ssh_target, f"test -d {candidate}"])
+
+        try:
+            subprocess.run(
+                ssh_cmd,
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+            remote_dir = candidate
+            break
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+
+    if remote_dir is None:
+        remote_dir = remote_candidates[0]
+        print(f"  No existing remote directory found; defaulting to {remote_dir}")
 
     print("  Uploading annotation to jumpbox...")
     print(f"    Local:  {local_file}")
     print(f"    Remote: {ssh_target}:{remote_dir}/annotation_draft.json")
 
-    # Build scp command for upload
     scp_cmd = ["scp"]
     if ssh_port:
-        scp_cmd.extend(["-P", ssh_port])  # Note: uppercase -P for scp
+        scp_cmd.extend(["-P", ssh_port])
     scp_cmd.extend([str(local_file), f"{ssh_target}:{remote_dir}/"])
 
     # Upload file with timeout

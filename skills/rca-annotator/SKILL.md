@@ -89,7 +89,7 @@ python scripts/cli.py download --job-id <job_id>
 
 **What this does**:
 1. Checks if `JUMPBOX_URI` environment variable is set
-2. If set: Downloads `/tmp/analysis/<job_id>/` from jumpbox to local `.analysis/<job_id>/`
+2. If set: Downloads `/tmp/analysis/<job_id>/` or `/tmp/<job_id>` from jumpbox to local `.analysis/<job_id>/`
 3. If not set: Verifies local `.analysis/<job_id>/` exists and has required files
 4. Validates that required files exist (step1, step3, step4 JSON files)
 
@@ -360,7 +360,7 @@ python scripts/cli.py upload --job-id <job_id>
 
 **What this does**:
 1. Verifies `annotation_draft.json` exists locally at `.analysis/<job_id>/`
-2. If `JUMPBOX_URI` is set: Uploads to `/tmp/analysis/<job_id>/annotation_draft.json` on jumpbox
+2. If `JUMPBOX_URI` is set: Uploads to `/tmp/analysis/<job_id>/annotation_draft.json` or `/tmp/<job_id>/annotation_draft.json` on jumpbox (matches whichever remote path exists)
 3. If `JUMPBOX_URI` not set: Skips upload, file remains local only
 4. Always keeps local copy as backup
 
@@ -391,7 +391,7 @@ Uploading annotation for job 1234567...
 
 Save annotation locally to `.analysis/<job_id>/annotation_draft.json` following this schema.
 
-After writing locally (Step 3), the file will be automatically uploaded to the jumpbox at `/tmp/analysis/<job_id>/annotation_draft.json` (Step 4) if `JUMPBOX_URI` is configured.
+After writing locally (Step 3), the file will be automatically uploaded to the jumpbox at `/tmp/analysis/<job_id>/annotation_draft.json` or `/tmp/<job_id>/annotation_draft.json` (Step 4) if `JUMPBOX_URI` is configured.
 
 ```json
 {
