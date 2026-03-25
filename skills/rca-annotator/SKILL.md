@@ -52,7 +52,7 @@ cd skills/rca-annotator
 python scripts/cli.py download --job-id <job_id>
 ```
 
-Downloads from jumpbox `/tmp/analysis/<job_id>/` (or `/tmp/<job_id>`) to local `.analysis/<job_id>/`. If `JUMPBOX_URI` unset, validates local files only. Errors on missing remote directory, missing required files, or connection failure.
+Downloads from jumpbox `/usr/local/mlflow/<job_id>/` to local `.analysis/<job_id>/`. If `JUMPBOX_URI` unset, validates local files only. Errors on missing remote directory, missing required files, or connection failure.
 
 ---
 

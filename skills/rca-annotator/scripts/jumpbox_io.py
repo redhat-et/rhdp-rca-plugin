@@ -117,7 +117,7 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
         print(f"  Error: {e}")
         return False
 
-    remote_candidates = [f"/tmp/analysis/{job_id}", f"/tmp/{job_id}"]
+    remote_candidates = [f"/usr/local/mlflow/{job_id}"]
     remote_dir = None
 
     for candidate in remote_candidates:
@@ -185,10 +185,7 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
 
 def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
     """
-    Upload annotation_draft.json to jumpbox at /tmp/analysis/<job_id>/ or /tmp/<job_id>/.
-
-    Checks which remote directory exists and uploads there. Falls back to
-    /tmp/analysis/<job_id>/ if neither exists yet.
+    Upload annotation_draft.json to jumpbox at /usr/local/mlflow/<job_id>/.
 
     Args:
         job_id: Job ID to upload annotation for
@@ -226,30 +223,7 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
         print(f"   Annotation saved locally at: {local_file}")
         return False
 
-    remote_candidates = [f"/tmp/analysis/{job_id}", f"/tmp/{job_id}"]
-    remote_dir = None
-
-    for candidate in remote_candidates:
-        ssh_cmd = ["ssh"]
-        if ssh_port:
-            ssh_cmd.extend(["-p", ssh_port])
-        ssh_cmd.extend([ssh_target, f"test -d {candidate}"])
-
-        try:
-            subprocess.run(
-                ssh_cmd,
-                check=True,
-                capture_output=True,
-                timeout=30,
-            )
-            remote_dir = candidate
-            break
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            continue
-
-    if remote_dir is None:
-        remote_dir = remote_candidates[0]
-        print(f"  No existing remote directory found; defaulting to {remote_dir}")
+    remote_dir = f"/usr/local/mlflow/{job_id}"
 
     print("  Uploading annotation to jumpbox...")
     print(f"    Local:  {local_file}")
