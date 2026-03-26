@@ -156,6 +156,27 @@ def _extract_pod_references(events: list[dict]) -> list[dict[str, str]]:
     return pod_refs
 
 
+def _parse_result_from_rendered_output(rendered: str) -> dict[str, Any] | None:
+    """Parse structured result fields from ANSI-rendered Ansible output.
+
+    When res fields are suppressed (e.g. _ansible_no_log), the diagnostic
+    data may still be available in the rendered event.stdout as a JSON blob
+    after 'FAILED! =>' or 'SUCCESS =>'.
+    """
+    # Strip ANSI escape codes
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
+    # Extract JSON blob after "=>"
+    match = re.search(r"=>\s*(\{.*\})\s*$", clean, re.DOTALL)
+    if match:
+        try:
+            result = json.loads(match.group(1))
+            if isinstance(result, dict):
+                return result
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return None
+
+
 def _extract_failed_tasks(events: list[dict]) -> list[dict[str, Any]]:
     """Extract failed tasks with error details."""
     failed = []
@@ -183,11 +204,20 @@ def _extract_failed_tasks(events: list[dict]) -> list[dict[str, Any]]:
                     if value is not None and value != "":
                         task_info[field] = value
 
-            # Fallback: capture event-level stdout when res fields are missing
-            if "stdout" not in task_info:
+            # Fallback: parse structured fields from rendered event.stdout
+            # when res fields are suppressed (e.g. _ansible_no_log)
+            if "stdout" not in task_info or "stderr" not in task_info:
                 event_stdout = event.get("stdout", "")
                 if event_stdout:
-                    task_info["stdout"] = event_stdout
+                    parsed = _parse_result_from_rendered_output(event_stdout)
+                    if parsed:
+                        for field in ("stdout", "stderr", "cmd"):
+                            if field not in task_info and field in parsed:
+                                task_info[field] = parsed[field]
+
+                    # Final fallback: raw event stdout if nothing was parsed
+                    if "stdout" not in task_info:
+                        task_info["stdout"] = event_stdout
 
             failed.append(task_info)
 
