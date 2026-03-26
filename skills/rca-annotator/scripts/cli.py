@@ -16,47 +16,6 @@ import sys
 from jumpbox_io import download_from_jumpbox, upload_to_jumpbox
 
 
-def cmd_download(args: argparse.Namespace) -> int:
-    """
-    Download analysis files from jumpbox.
-
-    Args:
-        args: Parsed command-line arguments
-
-    Returns:
-        0 on success, 1 on failure
-    """
-    print(f"Downloading analysis files for job {args.job_id}...")
-
-    if download_from_jumpbox(args.job_id):
-        print(f"\n Analysis files ready at .analysis/{args.job_id}/")
-        return 0
-    else:
-        print("\n Failed to download analysis files")
-        print("  Check JUMPBOX_URI environment variable and SSH configuration")
-        return 1
-
-
-def cmd_upload(args: argparse.Namespace) -> int:
-    """
-    Upload annotation_draft.json to jumpbox.
-
-    Args:
-        args: Parsed command-line arguments
-
-    Returns:
-        0 on success, 1 on failure
-    """
-    print(f"Uploading annotation for job {args.job_id}...")
-
-    if upload_to_jumpbox(args.job_id):
-        print("\n Annotation uploaded successfully")
-        return 0
-    else:
-        print("\n Failed to upload annotation")
-        return 1
-
-
 def main():
     """Main entry point for CLI."""
     parser = argparse.ArgumentParser(
@@ -106,14 +65,27 @@ Environment Variables:
         parser.print_help()
         return 1
 
-    # Execute command
+    job_id = args.job_id
+
     if args.command == "download":
-        return cmd_download(args)
-    elif args.command == "upload":
-        return cmd_upload(args)
-    else:
-        print(f"Unknown command: {args.command}")
+        print(f"Downloading analysis files for job {job_id}...")
+        if download_from_jumpbox(job_id):
+            print(f"\n Analysis files ready at .analysis/{job_id}/")
+            return 0
+        print("\n Failed to download analysis files")
+        print("  Check JUMPBOX_URI environment variable and SSH configuration")
         return 1
+
+    if args.command == "upload":
+        print(f"Uploading annotation for job {job_id}...")
+        if upload_to_jumpbox(job_id):
+            print("\n Annotation uploaded successfully")
+            return 0
+        print("\n Failed to upload annotation")
+        return 1
+
+    print(f"Unknown command: {args.command}")
+    return 1
 
 
 if __name__ == "__main__":
