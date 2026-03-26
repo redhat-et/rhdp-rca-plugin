@@ -35,7 +35,11 @@
       "created": "2023-10-27T10:04:00Z",
       "event_data": {
         "res": {
-          "msg": "Package not found"
+          "msg": "Package not found",
+          "rc": 1,
+          "cmd": ["yum", "install", "-y", "missing-package"],
+          "stderr": "Error: No matching packages to install",
+          "stdout": ""
         },
         "task_action": "yum",
         "duration": 5.2,
