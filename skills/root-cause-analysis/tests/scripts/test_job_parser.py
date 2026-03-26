@@ -257,7 +257,10 @@ def test_extract_failed_tasks_with_diagnostic_fields():
     assert task["error_message"] == "non-zero return code"
     assert task["rc"] == 1
     assert task["cmd"] == ["git", "checkout", "cert-manager-fallback"]
-    assert task["stderr"] == "error: pathspec 'cert-manager-fallback' did not match any file(s) known to git"
+    assert (
+        task["stderr"]
+        == "error: pathspec 'cert-manager-fallback' did not match any file(s) known to git"
+    )
     # stdout is empty string in res, so should not be in task_info from res
     # but event has no stdout either, so stdout key should be absent
     assert "stdout" not in task
