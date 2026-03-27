@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Step 4: Fetch GitHub Data - Parse paths and fetch all relevant files
+Fetch GitHub Data - Parse paths and fetch all relevant files
 
 Fetches all relevant GitHub configuration and workload files.
 Real analysis happens in Step 5 when Claude reads and interprets the files.
 
 Usage:
-    python -m scripts.step4_fetch_github --job-id <JOB_ID>
+    python -m scripts.github_fetcher --job-id <JOB_ID>
 """
 
 import argparse
@@ -82,7 +82,7 @@ class GitHubClient:
             return None
 
 
-# Step 4a: Parse GitHub Paths Functions
+# Step a: Parse GitHub Paths Functions
 def parse_job_name(job_name: str, guid: str) -> dict[str, Any]:
     """Parse RHPDS job name using GUID as anchor."""
     warnings = []
@@ -181,8 +181,8 @@ def parse_task_path(task_path: str) -> dict[str, Any]:
     }
 
 
-class Step4Analyzer:
-    """Step 4: Parse paths, fetch files, analyze, generate root cause"""
+class GitHubAnalyzer:
+    """Parse paths, fetch files, analyze, generate root cause"""
 
     def __init__(self, job_id: str, analysis_dir: Path, github_client: GitHubClient):
         self.job_id = job_id
@@ -199,8 +199,8 @@ class Step4Analyzer:
             return json.load(f)
 
     def parse_failed_tasks(self, job_context: dict) -> dict:
-        """Step 4a: Parse failed tasks and extract file paths"""
-        print("[INFO] Step 4a: Parsing failed tasks...")
+        """Step a: Parse failed tasks and extract file paths"""
+        print("[INFO] Step a: Parsing failed tasks...")
 
         job_id = job_context.get("job_id", "")
         failed_tasks = job_context.get("failed_tasks", [])
@@ -246,8 +246,8 @@ class Step4Analyzer:
         }
 
     def fetch_configs(self, platform: str, catalog: str, env: str) -> dict:
-        """Step 4b: Fetch configs with backward discovery"""
-        print("[INFO] Step 4b: Fetching AgnosticV configurations...")
+        """Step b: Fetch configs with backward discovery"""
+        print("[INFO] Step b: Fetching AgnosticV configurations...")
 
         start_path = f"{platform}/{catalog}/{env}.yaml"
 
@@ -306,8 +306,8 @@ class Step4Analyzer:
         return fetched_configs
 
     def fetch_workload_code(self, investigation_targets: dict) -> dict:
-        """Step 4c: Fetch all AgnosticD workload code"""
-        print("[INFO] Step 4c: Fetching AgnosticD workload code...")
+        """Step c: Fetch all AgnosticD workload code"""
+        print("[INFO] Step c: Fetching AgnosticD workload code...")
 
         fetched_workload = {}
         workload_files = investigation_targets.get("workload_code", [])
@@ -350,8 +350,8 @@ class Step4Analyzer:
 
     @trace(name="Run Step 4 analysis", span_type=SpanType.CHAIN if SpanType else None)
     def run(self) -> dict:
-        """Execute full Step 4 - fetch all GitHub files"""
-        print(f"[INFO] Starting Step 4 analysis for job {self.job_id}...")
+        """Execute GitHub file fetching - fetch all GitHub files"""
+        print(f"[INFO] Starting GitHub file fetch for job {self.job_id}...")
 
         # Load Step 1 context
         job_context = self.load_step1()
@@ -362,10 +362,10 @@ class Step4Analyzer:
         metadata = parse_job_name(job_name, guid)
         warnings = metadata.get("warnings", [])
 
-        # Step 4a: Parse failed tasks (only parses task paths, not metadata)
+        # Step a: Parse failed tasks (only parses task paths, not metadata)
         github_paths = self.parse_failed_tasks(job_context)
 
-        # Step 4b: Fetch configs once. This ensures configs are fetched even if there are no failed tasks
+        # Step b: Fetch configs once. This ensures configs are fetched even if there are no failed tasks
         platform = metadata.get("platform", "")
         catalog = metadata.get("catalog_item", "")
         env = metadata.get("env", "")
@@ -376,7 +376,7 @@ class Step4Analyzer:
         else:
             print("[WARNING] Missing platform/catalog/env metadata - skipping config fetch")
 
-        # Step 4c: For each failed task, fetch workload code
+        # Step c: For each failed task, fetch workload code
         github_fetches = []
 
         for task in github_paths.get("failed_tasks", []):
@@ -411,9 +411,9 @@ class Step4Analyzer:
         return result
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Step 4: Fetch all relevant GitHub configuration and workload files"
+        description="Fetch all relevant GitHub configuration and workload files"
     )
     parser.add_argument("--job-id", required=True, help="Job ID to analyze")
     args = parser.parse_args()
@@ -436,7 +436,7 @@ def main():
     github_client = GitHubClient(github_token)
 
     # Run analysis (using this skill's .analysis directory)
-    analyzer = Step4Analyzer(args.job_id, analysis_dir, github_client)
+    analyzer = GitHubAnalyzer(args.job_id, analysis_dir, github_client)
     result = analyzer.run()
 
     # Save output (for standalone usage)

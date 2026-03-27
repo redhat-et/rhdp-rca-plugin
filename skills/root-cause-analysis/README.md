@@ -123,10 +123,10 @@ Required GitHub MCP tools:
 # Step 5: Claude analyzes the data and generates summary (automatic when skill is invoked)
 ```
 
-**Note**: The `cli.py analyze` command runs all steps (1-4) automatically. Step 4 can also be run separately if needed:
+**Note**: The `cli.py analyze` command runs all steps (1-4) automatically. The GitHub fetcher can also be run separately if needed:
 ```bash
-# Run step 4 separately (standalone execution)
-.venv/bin/python scripts/step4_fetch_github.py --job-id 1234567
+# Run GitHub fetcher separately (standalone execution)
+.venv/bin/python scripts/github_fetcher.py --job-id 1234567
 ```
 
 ### Analyze by Job ID
@@ -218,7 +218,7 @@ All steps are executed automatically by the `cli.py analyze` command:
 - Reports success/404 status for each file attempt
 - Output: `step4_github_fetch_history.json`
 
-**Post-Step4 GitHub MCP Verification**: If step4 output contains `"error": "all_paths_failed"` or any `"status": "404"` in `paths_tried` arrays, **MUST** verify 404 errors using MCP tools. See [post-step4-verification.md](post-step4-verification.md) for complete verification process.
+**GitHub MCP Verification**: If step4 output contains `"error": "all_paths_failed"` or any `"status": "404"` in `paths_tried` arrays, verify 404 errors using MCP tools. See [github_mcp_verification.md](github_mcp_verification.md) for complete verification process.
 
 ### Step 5: Analyze and Generate Summary (Claude)
 
@@ -311,8 +311,8 @@ The skill can read job logs in these formats:
 - **Note**: MCP tools are only used for 404 verification, not for fetching files
 
 ### Files Not Found (404 errors)
-- Step 4 script handles path variations automatically
-- If 404 errors occur, use GitHub MCP tools to verify (see Step 4 section above)
+- GitHub fetcher script handles path variations automatically
+- If 404 errors occur, use GitHub MCP tools to verify (see GitHub MCP Verification section above)
 - Check parent directories first before doing wild searches
 - Document findings to identify parser bugs vs truly missing files
 
