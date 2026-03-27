@@ -6,8 +6,18 @@ annotation_draft.json back to jumpbox.
 """
 
 import os
+import re
+import shlex
 import subprocess
 from pathlib import Path
+
+
+def _validate_job_id(job_id: str) -> bool:
+    """Validate job_id is numeric only to prevent command injection."""
+    if not re.fullmatch(r"\d+", job_id):
+        print(f"  Error: Invalid job_id '{job_id}'. Must be numeric.")
+        return False
+    return True
 
 
 def parse_jumpbox_uri(jumpbox_uri: str) -> tuple[str, str | None]:
@@ -80,9 +90,7 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
     Returns:
         True on success, False on failure
     """
-    # Sanitize job_id to prevent path traversal
-    if "/" in job_id or "." in job_id:
-        print("  Error: Invalid job_id format. Cannot contain . or /")
+    if not _validate_job_id(job_id):
         return False
 
     # Get JUMPBOX_URI
@@ -124,7 +132,7 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
         ssh_cmd = ["ssh"]
         if ssh_port:
             ssh_cmd.extend(["-p", ssh_port])
-        ssh_cmd.extend([ssh_target, f"test -d {candidate}"])
+        ssh_cmd.extend([ssh_target, f"test -d {shlex.quote(candidate)}"])
 
         try:
             subprocess.run(
@@ -194,9 +202,7 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
     Returns:
         True on success, False on failure
     """
-    # Sanitize job_id to prevent path traversal
-    if "/" in job_id or "." in job_id:
-        print("  Error: Invalid job_id format. Cannot contain . or /")
+    if not _validate_job_id(job_id):
         return False
 
     local_file = Path(".analysis") / job_id / "annotation_draft.json"

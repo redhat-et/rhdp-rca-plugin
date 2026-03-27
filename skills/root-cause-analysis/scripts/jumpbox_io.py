@@ -7,8 +7,18 @@ to the jumpbox via rsync.
 
 import json
 import os
+import re
+import shlex
 import subprocess
 from pathlib import Path
+
+
+def _validate_job_id(job_id: str) -> bool:
+    """Validate job_id is numeric only to prevent command injection."""
+    if not re.fullmatch(r"\d+", job_id):
+        print(f"  Error: Invalid job_id '{job_id}'. Must be numeric.")
+        return False
+    return True
 
 
 def parse_jumpbox_uri(jumpbox_uri: str) -> tuple[str, str | None]:
@@ -63,8 +73,7 @@ def upload_to_jumpbox(
     Returns:
         True on success, False on failure
     """
-    if "/" in job_id or "." in job_id:
-        print("  Error: Invalid job_id format. Cannot contain . or /")
+    if not _validate_job_id(job_id):
         return False
 
     if not analysis_dir.exists():
@@ -101,7 +110,7 @@ def upload_to_jumpbox(
     ssh_cmd = ["ssh"]
     if ssh_port:
         ssh_cmd.extend(["-p", ssh_port])
-    ssh_cmd.extend([ssh_target, f"mkdir -p {remote_dir}"])
+    ssh_cmd.extend([ssh_target, f"mkdir -p {shlex.quote(remote_dir)}"])
 
     try:
         subprocess.run(ssh_cmd, check=True, capture_output=True, timeout=30)
