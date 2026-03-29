@@ -31,7 +31,15 @@
             "resource",
             "cloud_api",
             "secrets",
-            "unknown"
+            "unknown",
+            "platform_failure",
+            "connectivity_failure",
+            "authentication_failure",
+            "resource_failure",
+            "timeout_failure",
+            "automation_failure",
+            "infrastructure_failure",
+            "general_failure"
           ]
         },
         "confidence": {
