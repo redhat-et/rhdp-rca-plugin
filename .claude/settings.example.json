@@ -49,6 +49,16 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pkill -f \"ssh.*-L.*$MLFLOW_PORT.*localhost:5000.*$JUMPBOX_URI\" 2>/dev/null || true"
+          }
+        ]
+      }
     ]
   }
 }
