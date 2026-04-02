@@ -15,6 +15,7 @@ if __name__ == "__main__" and __package__ is None:
     from scripts.config import Config
     from scripts.correlator import build_correlation_timeline, fetch_correlated_logs
     from scripts.job_parser import parse_job_log
+    from scripts.jumpbox_io import upload_to_jumpbox
     from scripts.log_fetcher import fetch_job_log
     from scripts.setup import print_checks, run_checks
     from scripts.step4_fetch_github import GitHubClient, Step4Analyzer
@@ -24,6 +25,7 @@ else:
     from .config import Config
     from .correlator import build_correlation_timeline, fetch_correlated_logs
     from .job_parser import parse_job_log
+    from .jumpbox_io import upload_to_jumpbox
     from .log_fetcher import fetch_job_log
     from .setup import print_checks, run_checks
     from .step4_fetch_github import GitHubClient, Step4Analyzer
@@ -47,95 +49,17 @@ def save_step(analysis_dir: Path, step: int, data: dict) -> Path:
 
 
 @trace(name="Upload analysis", span_type=SpanType.CHAIN if SpanType else None)
-def upload_analysis_to_jumpbox(args: argparse.Namespace, config: Config, span=None) -> int:
-    """Upload analysis directory to Jumpbox in /usr/local/mlflow/{job_id}/ with session.json."""
-    analysis_dir = config.analysis_dir / args.job_id
-
-    if not analysis_dir.exists():
-        error_message = f"No analysis found for job {args.job_id}"
-        print(error_message)
-        if span:
-            span.set_outputs({"error": error_message})
-        return 1
-
-    print(f"Uploading analysis for job {args.job_id}...")
-
-    if not config.jumpbox_uri:
-        print("  Skipping upload: JUMPBOX_URI not configured")
-        return 1
-
-    # Parse JUMPBOX_URI format: "user@host -p port"
-    parts = config.jumpbox_uri.split()
-    if len(parts) < 1:
-        print("  Error: Invalid JUMPBOX_URI format")
-        return 1
-
-    ssh_target = parts[0]  # user@host
-    ssh_port = None
-
-    # Extract port if present
-    if "-p" in parts:
-        try:
-            port_idx = parts.index("-p")
-            if port_idx + 1 < len(parts):
-                ssh_port = parts[port_idx + 1]
-        except (ValueError, IndexError):
-            pass
-
-    session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
+def cmd_upload(args: argparse.Namespace, config: Config, span=None) -> int:
+    """Upload analysis directory to Jumpbox via jumpbox_io.upload_to_jumpbox."""
     job_id = args.job_id
-    remote_base_dir = f"/usr/local/mlflow/{job_id}"
+    analysis_dir = config.analysis_dir / job_id
+    session_id = os.environ.get("CLAUDE_SESSION_ID", "unknown")
 
-    # Create session.json file locally (will be overwritten if exists)
-    session_file = analysis_dir / "session.json"
-    try:
-        with open(session_file, "w") as f:
-            json.dump({"session_id": session_id, "job_id": job_id}, f, indent=2)
-    except Exception as e:
-        print(f"  Warning: Could not create session.json: {e}")
+    success = upload_to_jumpbox(job_id, analysis_dir, config.jumpbox_uri, session_id)
 
-    # Build SSH command to create remote directory
-    ssh_cmd = ["ssh"]
-    if ssh_port:
-        ssh_cmd.extend(["-p", ssh_port])
-    ssh_cmd.extend([ssh_target, f"mkdir -p {remote_base_dir}"])
-
-    # Create remote directory structure
-    try:
-        subprocess.run(
-            ssh_cmd,
-            check=True,
-            capture_output=True,
-            timeout=30,
-        )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        print(f"  Error creating remote directory: {e}")
-        return 1
-
-    # Upload analysis directory contents using rsync
-    try:
-        rsync_cmd = ["rsync"]
-        if ssh_port:
-            rsync_cmd.extend(["-e", f"ssh -p {ssh_port}"])
-        # Add trailing slash to source to copy contents, not the directory itself
-        rsync_cmd.extend(
-            ["-az", "--quiet", f"{str(analysis_dir)}/", f"{ssh_target}:{remote_base_dir}/"]
-        )
-
-        subprocess.run(
-            rsync_cmd,
-            check=True,
-            timeout=60,
-        )
-        print(f"  Uploaded to Jumpbox ({ssh_target}): {remote_base_dir}/")
-        if span:
-            span.set_outputs({"job_id": job_id, "success": True})
-        return 0
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        print(f"  Error uploading to Jumpbox: {e}")
-        if span:
-            span.set_outputs({"job_id": job_id, "success": False, "error": str(e)})
-        return 1
+    if span:
+        span.set_outputs({"job_id": job_id, "success": success})
+    return 0 if success else 1
 
 
 def get_step_name(step: int) -> str:
@@ -614,7 +538,7 @@ def main() -> int:
         "query": cmd_query,
         "setup": cmd_setup,
         "status": cmd_status,
-        "upload": upload_analysis_to_jumpbox,
+        "upload": cmd_upload,
     }
 
     exit_code = commands[args.command](args, config, span)
