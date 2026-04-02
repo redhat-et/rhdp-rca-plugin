@@ -1,25 +1,25 @@
 ---
 name: rca-annotator
-description: LLM-as-judge skill that independently evaluates root-cause-analysis outputs to produce ground-truth annotations with multi-pass consistency checks, difficulty calibration, and complete evidence traceability.
+description: Structured annotation tool that walks users through reviewing and labeling root-cause-analysis outputs, with evidence traceability, difficulty calibration, and alternative diagnosis capture.
 allowed-tools:
   - Read
   - Write
   - Bash
 ---
 
-# RCA Annotator (LLM-as-Judge)
+# RCA Annotator
 
-An LLM-as-judge skill that independently re-analyzes raw RCA evidence (step1, step3, step4 outputs) to produce ground-truth annotations. The judge forms its own conclusion from the same source evidence the agent had — without reading the agent's diagnosis — producing an unbiased reference label for scoring agent accuracy.
+A structured annotation tool that presents the `root-cause-analysis` agent's diagnosis to the user and guides them through labeling it — capturing whether the diagnosis is correct, evidence quality, difficulty, and alternative hypotheses.
 
-| | `root-cause-analysis` (Agent) | `rca-annotator` (Judge) |
+| | `root-cause-analysis` (Agent) | `rca-annotator` (Annotation tool) |
 |---|---|---|
-| **Purpose** | Diagnose failures for users | Produce ground-truth labels for evaluation |
-| **Reads** | Logs, Splunk, GitHub (live) | Step 1/3/4 output files (offline) |
-| **Output** | Human-readable diagnosis | Structured `annotation_draft.json` |
+| **Purpose** | Diagnose failures for users | Capture human-labeled ground-truth data |
+| **Reads** | Logs, Splunk, GitHub (live) | Step 1/3/4/5 output files (offline) |
+| **Output** | Human-readable diagnosis | Structured `annotation.json` |
 
-**Use when**: steps 1-4 outputs exist and you need labeled ground-truth data, difficulty benchmarking, or alternative diagnosis identification.
+**Use when**: a `root-cause-analysis` run is complete and you want to annotate its output as correct, incorrect, or partially correct — for evaluation, benchmarking, or dataset building.
 
-**Do NOT use** to perform initial RCA (use `root-cause-analysis`) or directly score agent output (compare annotation externally).
+**Do NOT use** to perform initial RCA (use `root-cause-analysis`).
 
 ## Prerequisites
 
@@ -28,6 +28,7 @@ Verify root-cause-analysis has been completed.
 - `JUMPBOX_URI` (optional) — SSH connection string (e.g. `"user@host -p 2222"`). If unset, uses local `.analysis/` only.
 - SSH keys configured in `~/.ssh/config` if using jumpbox; `ssh` and `rsync` installed.
 - **Required files** in `.analysis/<job_id>/`:
+  - `step5_summary.json` — Agent's final diagnosis (primary input)
   - `step1_job_context.json` — Job metadata, failed tasks
   - `step3_correlation.json` — Timeline with AAP + Splunk events
   - `step4_github_fetch_history.json` — Configuration and code context
@@ -37,12 +38,10 @@ If missing, run `root-cause-analysis` skill first.
 ## Workflow
 
 0. Download from jumpbox (if `JUMPBOX_URI` set) or verify local files
-1. Read step1, step3, step4 (never the agent's diagnosis)
-2. Independently determine root cause with evidence scoring and traceability
-3. *(Optional)* Multi-pass consistency check
-4. Write `annotation_draft.json`
-5. Human review — ask the user to validate and correct the annotation
-6. Upload to jumpbox (if `JUMPBOX_URI` set)
+1. Read `step5_summary.json` — present the agent's diagnosis to the user
+2. Walk through annotation questions interactively — the user labels each section
+3. Write `annotation.json` with the user's labels
+4. Upload to jumpbox (if `JUMPBOX_URI` set)
 
 ---
 
@@ -57,132 +56,118 @@ Downloads from jumpbox `/usr/local/mlflow/<job_id>/` to local `.analysis/<job_id
 
 ---
 
-## Step 1: Read Outputs
+## Step 1: Read Agent Diagnosis
 
-Read in order: **step1** (job metadata, failed tasks, errors) → **step3** (correlated timeline incl. Splunk) → **step4** (config hierarchy and code). Skip `step2_splunk_logs.json` — step3 already includes correlated events.
+Read `step5_summary.json` and present the agent's diagnosis clearly to the user:
+
+- Root cause category and summary
+- Confidence level
+- Key evidence cited
+- Difficulty score (if present)
+- Recommendations
+- Alternative diagnoses (if any)
+
+This is the starting point for annotation. The user is reviewing the agent's work.
 
 ---
 
-## Step 2: Analyze and Annotate
+## Step 2: Interactive Annotation
 
-### A. Root Cause Category
+Walk through each question below with the user. Present the relevant section from `step5_summary.json` before asking each question. Wait for the user's response before continuing.
 
-**From Step1**: Review `failed_tasks[]` — task names, actions, errors, durations. Action patterns hint at categories (e.g. `k8s_info` → infrastructure/rbac, `uri` → network/secrets, `command/shell` → configuration/dependency).
+### 1. Root Cause Category
 
-**From Step3**: Examine `timeline_events[]` chronologically. Pod errors before task failures → infrastructure; task failures before pod errors → configuration/code.
+Present the agent's category and summary. Ask:
 
-**From Step4**: Review `github_fetches[]` for config hierarchy. Check `fetched_configs` for missing variables/conflicts and `fetched_workload` for code at failure points. Note any `status: 404` or `error: all_paths_failed`.
+> **Is the root cause category correct?** *(e.g. `configuration`, `infrastructure`, `credential` — or should it be something else?)*
 
-**Categories**: `configuration` | `infrastructure` | `application_bug` | `dependency` | `network` | `resource` | `cloud_api` | `credential` | `secrets` | `unknown`
+Valid categories: `configuration` | `infrastructure` | `application_bug` | `dependency` | `network` | `resource` | `cloud_api` | `credential` | `secrets` | `unknown`
 
-### B. Evidence Construction with Traceability
+### 2. Summary Accuracy
 
-Each evidence item requires:
-- **source** — `step1` | `step3` | `step4`
-- **source_file** — path to analysis file
-- **json_path** — exact path in source JSON
-- **exact_value** and/or **exact_quote** — literal value or text
-- **confidence** — `high` | `medium` | `low`
-- **is_root_cause** — exactly ONE item must be `true`
+Present the agent's summary sentence. Ask:
 
-Additional fields for code/config sources: `line_number`, `github_path` (`owner/repo:path:line`).
+> **Is the summary accurate and specific?** *(Does it clearly describe what failed and why?)*
+
+### 3. Evidence
+
+Present the evidence items the agent cited. Ask:
+
+> **Is any evidence missing or wrong?** *(Any key log lines, config values, or Splunk events that were overlooked or incorrectly cited?)*
+
+If the user wants to cross-check, read step1/step3/step4 and compare against what the agent cited. This is reference material for validation — not a re-analysis.
+
+**Evidence traceability format** (for any new or corrected evidence items the user provides):
 
 ```json
 {
-  "source": "step1",
+  "source": "step1 | step3 | step4",
   "source_file": ".analysis/<job_id>/step1_job_context.json",
   "json_path": "failed_tasks[0].duration",
   "exact_value": 917.565567,
-  "message": "Task duration indicates timeout, not immediate failure",
-  "confidence": "medium",
-  "is_root_cause": false
+  "exact_quote": "optional — literal text for code/config",
+  "line_number": 5,
+  "github_path": "owner/repo:path/to/file.yml:line",
+  "message": "The relevant log line or config snippet.",
+  "confidence": "high | medium | low",
+  "is_root_cause": true
 }
 ```
 
-For `agnosticd_code` or `agnosticv_config` sources, add `line_number`, `exact_quote`, and `github_path`.
+### 4. Difficulty Rating
 
-**Process**: Start with Step3 timeline → filter to `task_failed`/`pod_error` → identify root cause evidence → extract traceability → assign confidence → include supporting evidence.
+Present the agent's difficulty score (or estimate one from the evidence). Present the calibration rubric to help the user score:
 
-### C. Difficulty Calibration
+| Criterion | Points |
+|---|---|
+| Requires cross-source correlation (AAP + Splunk + GitHub) | +3 |
+| Requires understanding code behavior | +2 |
+| Error message is generic or misleading | +2 |
+| Requires variable precedence/override knowledge | +1 |
+| Requires domain knowledge (K8s, Ansible, cloud APIs) | +1 |
+| Multiple plausible alternatives exist | +1 |
+| Timing dependencies are critical | +1 |
 
-Score 0-10 based on:
-- **+3**: Requires cross-source correlation (AAP + Splunk + GitHub)
-- **+2**: Requires understanding code behavior
-- **+2**: Error message is generic/misleading
-- **+1**: Requires variable precedence/override knowledge
-- **+1**: Requires domain knowledge (K8s, Ansible, cloud APIs)
-- **+1**: Multiple plausible alternatives exist
-- **+1**: Timing dependencies critical
+Mapping: 0–3 = easy, 4–6 = medium, 7–10 = hard.
 
-Mapping: 0-3 = easy, 4-6 = medium, 7-10 = hard. Include score and justification.
+Ask:
 
-### D. Alternative Diagnoses
+> **Is the difficulty rating appropriate?** *(Score of X / 10 — too easy, too hard, or about right? Use the rubric above if helpful.)*
 
-Identify plausible-but-incorrect hypotheses with:
-- `category`, `summary`, `why_wrong`
-- `plausibility`: `high` (shares many characteristics) | `medium` (some evidence) | `low` (superficial similarity)
-- `supporting_evidence` and `contradicting_evidence` lists
+### 5. Alternative Diagnoses
 
----
+Present any alternative diagnoses the agent identified. Ask:
 
-## Step 2b: Multi-Pass Consistency Check (Optional)
+> **Any alternative diagnoses to add or correct?** *(Other plausible-but-incorrect hypotheses worth capturing?)*
 
-For high-stakes annotations or medium/low initial confidence. Run 2-3 independent passes and compare:
+Alternative diagnosis format:
 
-- All agree on category → consensus, confidence: high
-- 2/3 agree → majority, confidence: medium, note discrepancy
-- All differ → confidence: low, flag for human review
+```json
+{
+  "category": "infrastructure",
+  "summary": "A plausible but wrong diagnosis.",
+  "why_wrong": "Why the evidence does not support this.",
+  "plausibility": "high | medium | low",
+  "supporting_evidence": ["long timeout", "destroy action"],
+  "contradicting_evidence": ["test environment", "auth retry pattern"]
+}
+```
 
-Skip if initial confidence is high and difficulty is easy.
+`plausibility`: `high` = shares many characteristics | `medium` = some evidence | `low` = superficial similarity
 
 ---
 
 ## Step 3: Write Annotation
 
-Verify before writing:
-- All required files read (step1, step3, step4)
-- Root cause category matches evidence
+After all questions are answered, verify before writing:
+
+- Root cause category confirmed or corrected
 - Exactly one evidence item has `is_root_cause: true`
 - All evidence has traceability (source_file, json_path, exact_value/quote)
-- All evidence has confidence level
 - Difficulty score calculated with justification
 - Alternative diagnoses have plausibility levels
 
-Write `annotation_draft.json` to `.analysis/<job_id>/`.
-
----
-
-## Step 3b: Human Review
-
-After writing `annotation_draft.json`, present the annotation summary to the user and ask the following questions. Wait for responses and apply any corrections before uploading.
-
-**Present to the user:**
-- Root cause category and summary
-- Confidence level
-- Difficulty score and justification
-- Number of evidence items and the one marked `is_root_cause: true`
-- Alternative diagnoses (if any)
-
-**Ask the user:**
-
-1. **Is the root cause category correct?** *(e.g. `configuration`, `infrastructure`, `credential` — or should it be something else?)*
-2. **Is the summary accurate and specific?** *(Does it clearly describe what failed and why?)*
-3. **Is any evidence missing or wrong?** *(Any key log lines, config values, or Splunk events that were overlooked or incorrectly cited?)*
-4. **Is the difficulty rating appropriate?** *(Score of X / 10 — too easy, too hard, or about right?)*
-5. **Any alternative diagnoses to add?** *(Other plausible-but-incorrect hypotheses worth capturing?)*
-
-Record all responses in a `human_review` field appended to `annotation_draft.json`. **Do not modify the original annotation fields** — the human feedback is captured separately so both the judge's output and the reviewer's corrections are preserved side by side.
-
-The `human_review` object contains:
-- `reviewed_at` — ISO timestamp
-- `category_correct` — `true` / `false`
-- `category_comment` — free-text correction or confirmation
-- `summary_accurate` — `true` / `false`
-- `summary_comment` — free-text correction or confirmation
-- `evidence_feedback` — free-text notes on missing or wrong evidence
-- `difficulty_appropriate` — `true` / `false`
-- `difficulty_comment` — free-text correction or confirmation
-- `alternative_diagnoses_added` — list of any new alternatives provided by the user (same shape as `alternative_diagnoses` items)
+Write `annotation.json` to `.analysis/<job_id>/`.
 
 ---
 
@@ -193,28 +178,30 @@ cd skills/rca-annotator
 python scripts/cli.py upload --job-id <job_id>
 ```
 
-Uploads `.analysis/<job_id>/annotation_draft.json` to jumpbox if `JUMPBOX_URI` set. Local copy always preserved. If `JUMPBOX_URI` unset, file remains local only.
+Uploads `.analysis/<job_id>/annotation.json` to jumpbox if `JUMPBOX_URI` set. Local copy always preserved. If `JUMPBOX_URI` unset, file remains local only.
 
 ---
 
 ## Output Format
 
-Save to `.analysis/<job_id>/annotation_draft.json`:
+Save to `.analysis/<job_id>/annotation.json`:
 
 ```json
 {
   "job_id": "1234567",
-  "annotator": "claude_judge",
-  "annotated_at": "2026-03-19T12:00:00Z",
-  "difficulty": "easy | medium | hard",
-  "difficulty_score": 5,
-  "difficulty_justification": "Requires correlating task code (+2) with missing configs...",
+  "annotated_at": "2026-03-19T12:05:00Z",
+
+  "category_correct": true,
+  "category_comment": "Confirmed — matches the auth retry pattern.",
 
   "root_cause": {
     "category": "configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | credential | secrets | unknown",
     "summary": "One sentence describing what failed and why.",
     "confidence": "high | medium | low"
   },
+
+  "summary_accurate": true,
+  "summary_comment": "Clear and specific.",
 
   "evidence": [
     {
@@ -230,6 +217,14 @@ Save to `.analysis/<job_id>/annotation_draft.json`:
       "is_root_cause": true
     }
   ],
+
+  "evidence_feedback": "Missing the kubeconfig 404 from step4 github_fetches.",
+
+  "difficulty": "easy | medium | hard",
+  "difficulty_score": 5,
+  "difficulty_justification": "Requires correlating task code (+2) with missing configs and interpreting generic MODULE FAILURE (+2). Total: 5.",
+  "difficulty_appropriate": false,
+  "difficulty_comment": "Should be hard (8/10) — requires deep variable precedence knowledge.",
 
   "recommendations": [
     {
@@ -252,29 +247,6 @@ Save to `.analysis/<job_id>/annotation_draft.json`:
       "supporting_evidence": ["long timeout", "destroy action"],
       "contradicting_evidence": ["test environment", "auth retry pattern"]
     }
-  ],
-
-  "consistency_check": {
-    "num_passes": 3,
-    "agreement": {
-      "category_agreement": "full | partial | none",
-      "category_votes": {"credential": 3},
-      "evidence_overlap": 0.85,
-      "confidence_distribution": {"high": 2, "medium": 1, "low": 0},
-      "confidence_mode": "high"
-    }
-  },
-
-  "human_review": {
-    "reviewed_at": "2026-03-19T12:05:00Z",
-    "category_correct": true,
-    "category_comment": "Confirmed.",
-    "summary_accurate": true,
-    "summary_comment": "Clear and specific.",
-    "evidence_feedback": "No issues.",
-    "difficulty_appropriate": false,
-    "difficulty_comment": "Should be hard — requires deep variable precedence knowledge.",
-    "alternative_diagnoses_added": []
-  }
+  ]
 }
 ```

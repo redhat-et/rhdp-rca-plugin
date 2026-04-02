@@ -1,16 +1,18 @@
 {
   "job_id": "1234567",
-  "annotator": "claude_judge",
-  "annotated_at": "2026-03-08T12:00:00Z",
-  "difficulty": "easy | medium | hard",
-  "difficulty_score": 5,
-  "difficulty_justification": "Requires correlating task code (+2) with missing configs (+0) and interpreting generic MODULE FAILURE (+2) and understanding default(omit) behavior (+1). Total: 5 points.",
+  "annotated_at": "2026-03-19T12:05:00Z",
+
+  "category_correct": true,
+  "category_comment": "Confirmed — credential issue matches the auth retry pattern.",
 
   "root_cause": {
     "category": "configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | credential | secrets | unknown",
     "summary": "One sentence describing what failed and why.",
     "confidence": "high | medium | low"
   },
+
+  "summary_accurate": true,
+  "summary_comment": "Clear and specific enough.",
 
   "evidence": [
     {
@@ -26,6 +28,14 @@
       "is_root_cause": true
     }
   ],
+
+  "evidence_feedback": "Missing the kubeconfig 404 from step4 github_fetches.",
+
+  "difficulty": "easy | medium | hard",
+  "difficulty_score": 5,
+  "difficulty_justification": "Requires correlating task code (+2) with missing configs (+0) and interpreting generic MODULE FAILURE (+2) and understanding default(omit) behavior (+1). Total: 5 points.",
+  "difficulty_appropriate": false,
+  "difficulty_comment": "Should be hard (8/10), not medium — requires deep variable precedence knowledge.",
 
   "recommendations": [
     {
@@ -54,35 +64,5 @@
         "Another contradicting factor"
       ]
     }
-  ],
-
-  "consistency_check": {
-    "num_passes": 3,
-    "agreement": {
-      "category_agreement": "full | partial | none",
-      "category_votes": {"credential": 3, "infrastructure": 0},
-      "evidence_overlap": 0.85,
-      "confidence_distribution": {"high": 2, "medium": 1, "low": 0},
-      "confidence_mode": "high"
-    }
-  },
-
-  "human_review": {
-    "reviewed_at": "2026-03-08T12:05:00Z",
-    "category_correct": true,
-    "category_comment": "Confirmed — credential issue matches the auth retry pattern.",
-    "summary_accurate": true,
-    "summary_comment": "Clear and specific enough.",
-    "evidence_feedback": "Missing the kubeconfig 404 from step4 github_fetches.",
-    "difficulty_appropriate": false,
-    "difficulty_comment": "Should be hard (8/10), not medium — requires deep variable precedence knowledge.",
-    "alternative_diagnoses_added": [
-      {
-        "category": "infrastructure",
-        "summary": "OCP node pressure caused pod eviction before task completed.",
-        "why_wrong": "No pod eviction events in step3 timeline; all pod errors appeared after task failure.",
-        "plausibility": "medium"
-      }
-    ]
-  }
+  ]
 }

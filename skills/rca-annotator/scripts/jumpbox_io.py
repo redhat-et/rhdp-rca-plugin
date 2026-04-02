@@ -2,7 +2,7 @@
 Jumpbox I/O functions for RCA-Annotator.
 
 Provides functions to download analysis files from jumpbox and upload
-annotation_draft.json back to jumpbox.
+annotation.json back to jumpbox.
 """
 
 import os
@@ -196,7 +196,7 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
 
 def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
     """
-    Upload annotation_draft.json to jumpbox at /usr/local/mlflow/<job_id>/.
+    Upload annotation.json to jumpbox at /usr/local/mlflow/<job_id>/.
 
     Args:
         job_id: Job ID to upload annotation for
@@ -208,7 +208,7 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
     if not _validate_job_id(job_id):
         return False
 
-    local_file = Path(".analysis") / job_id / "annotation_draft.json"
+    local_file = Path(".analysis") / job_id / "annotation.json"
 
     # Check if local file exists
     if not local_file.exists():
@@ -236,7 +236,7 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
 
     print("  Uploading annotation to jumpbox...")
     print(f"    Local:  {local_file}")
-    print(f"    Remote: {ssh_target}:{remote_dir}/annotation_draft.json")
+    print(f"    Remote: {ssh_target}:{remote_dir}/annotation.json")
 
     scp_cmd = ["scp"]
     if ssh_port:
@@ -256,7 +256,7 @@ def upload_to_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
         return False
 
     print("   Annotation uploaded successfully")
-    print(f"    Remote location: {ssh_target}:{remote_dir}/annotation_draft.json")
+    print(f"    Remote location: {ssh_target}:{remote_dir}/annotation.json")
     print(f"    Local backup: {local_file}")
 
     return True

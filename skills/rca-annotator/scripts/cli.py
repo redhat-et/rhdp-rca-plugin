@@ -3,7 +3,7 @@
 RCA-Annotator CLI - Command-line interface for jumpbox synchronization.
 
 This script provides commands to download analysis files from jumpbox
-and upload annotation_draft.json back to jumpbox.
+and upload annotation.json back to jumpbox.
 
 Usage:
     python scripts/cli.py download --job-id <job_id>
@@ -51,7 +51,7 @@ Environment Variables:
     # Upload command
     upload_parser = subparsers.add_parser(
         "upload",
-        help="Upload annotation_draft.json to jumpbox",
+        help="Upload annotation.json to jumpbox",
     )
     upload_parser.add_argument(
         "--job-id",
