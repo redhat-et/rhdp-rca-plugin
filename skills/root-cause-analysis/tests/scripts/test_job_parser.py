@@ -202,6 +202,11 @@ def test_extract_failed_tasks_basic(sample_job_data):
     assert task["error_message"] == "Package not found"
     assert task["task_action"] == "yum"
     assert task["duration"] == 5.2
+    assert task["rc"] == 1
+    assert task["cmd"] == ["yum", "install", "-y", "missing-package"]
+    assert task["stderr"] == "Error: No matching packages to install"
+    # stdout in res is empty string, so it should not be included from res
+    assert "stdout" not in task or task.get("stdout") != ""
 
 
 def test_extract_failed_tasks_ignores_non_failures():
@@ -226,6 +231,80 @@ def test_extract_failed_tasks_string_res():
     ]
     failed = _extract_failed_tasks(events)
     assert failed[0]["error_message"] == "Simple error string"
+
+
+def test_extract_failed_tasks_with_diagnostic_fields():
+    """Test that stdout, stderr, cmd, and rc are extracted from res."""
+    events = [
+        {
+            "event": "runner_on_failed",
+            "failed": True,
+            "task": "Git checkout",
+            "event_data": {
+                "res": {
+                    "msg": "non-zero return code",
+                    "rc": 1,
+                    "cmd": ["git", "checkout", "cert-manager-fallback"],
+                    "stdout": "",
+                    "stderr": "error: pathspec 'cert-manager-fallback' did not match any file(s) known to git",
+                },
+            },
+        }
+    ]
+    failed = _extract_failed_tasks(events)
+    assert len(failed) == 1
+    task = failed[0]
+    assert task["error_message"] == "non-zero return code"
+    assert task["rc"] == 1
+    assert task["cmd"] == ["git", "checkout", "cert-manager-fallback"]
+    assert (
+        task["stderr"]
+        == "error: pathspec 'cert-manager-fallback' did not match any file(s) known to git"
+    )
+    # stdout is empty string in res, so should not be in task_info from res
+    # but event has no stdout either, so stdout key should be absent
+    assert "stdout" not in task
+
+
+def test_extract_failed_tasks_event_stdout_fallback():
+    """Test fallback to event-level stdout when res has no stdout."""
+    events = [
+        {
+            "event": "runner_on_failed",
+            "failed": True,
+            "task": "Run script",
+            "stdout": "TASK [run_script] fatal: host unreachable",
+            "event_data": {
+                "res": {
+                    "msg": "Connection timed out",
+                },
+            },
+        }
+    ]
+    failed = _extract_failed_tasks(events)
+    assert len(failed) == 1
+    task = failed[0]
+    assert task["stdout"] == "TASK [run_script] fatal: host unreachable"
+
+
+def test_extract_failed_tasks_res_stdout_takes_priority():
+    """Test that res.stdout takes priority over event stdout."""
+    events = [
+        {
+            "event": "runner_on_failed",
+            "failed": True,
+            "task": "Run command",
+            "stdout": "rendered ansible output",
+            "event_data": {
+                "res": {
+                    "msg": "failed",
+                    "stdout": "actual command output from res",
+                },
+            },
+        }
+    ]
+    failed = _extract_failed_tasks(events)
+    assert failed[0]["stdout"] == "actual command output from res"
 
 
 def test_extract_failed_tasks_no_failures():

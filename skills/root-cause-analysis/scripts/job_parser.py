@@ -156,6 +156,27 @@ def _extract_pod_references(events: list[dict]) -> list[dict[str, str]]:
     return pod_refs
 
 
+def _parse_result_from_rendered_output(rendered: str) -> dict[str, Any] | None:
+    """Parse structured result fields from ANSI-rendered Ansible output.
+
+    When res fields are suppressed (e.g. _ansible_no_log), the diagnostic
+    data may still be available in the rendered event.stdout as a JSON blob
+    after 'FAILED! =>' or 'SUCCESS =>'.
+    """
+    # Strip ANSI escape codes
+    clean = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
+    # Extract JSON blob after "=>"
+    match = re.search(r"=>\s*(\{.*\})\s*$", clean, re.DOTALL)
+    if match:
+        try:
+            result = json.loads(match.group(1))
+            if isinstance(result, dict):
+                return result
+        except (json.JSONDecodeError, ValueError):
+            pass
+    return None
+
+
 def _extract_failed_tasks(events: list[dict]) -> list[dict[str, Any]]:
     """Extract failed tasks with error details."""
     failed = []
@@ -165,18 +186,40 @@ def _extract_failed_tasks(events: list[dict]) -> list[dict[str, Any]]:
             event_data = event.get("event_data", {})
             res = event_data.get("res", {})
 
-            failed.append(
-                {
-                    "task": event.get("task", ""),
-                    "play": event.get("play", ""),
-                    "role": event.get("role", ""),
-                    "timestamp": event.get("created", ""),
-                    "error_message": res.get("msg", "") if isinstance(res, dict) else str(res),
-                    "task_path": event_data.get("task_path", ""),
-                    "task_action": event_data.get("task_action", ""),
-                    "duration": event_data.get("duration", 0),
-                }
-            )
+            task_info = {
+                "task": event.get("task", ""),
+                "play": event.get("play", ""),
+                "role": event.get("role", ""),
+                "timestamp": event.get("created", ""),
+                "error_message": res.get("msg", "") if isinstance(res, dict) else str(res),
+                "task_path": event_data.get("task_path", ""),
+                "task_action": event_data.get("task_action", ""),
+                "duration": event_data.get("duration", 0),
+            }
+
+            # Extract diagnostic details from res when available
+            if isinstance(res, dict):
+                for field in ("stdout", "stderr", "cmd", "rc"):
+                    value = res.get(field)
+                    if value is not None and value != "":
+                        task_info[field] = value
+
+            # Fallback: parse structured fields from rendered event.stdout
+            # when res fields are suppressed (e.g. _ansible_no_log)
+            if "stdout" not in task_info or "stderr" not in task_info:
+                event_stdout = event.get("stdout", "")
+                if event_stdout:
+                    parsed = _parse_result_from_rendered_output(event_stdout)
+                    if parsed:
+                        for field in ("stdout", "stderr", "cmd"):
+                            if field not in task_info and field in parsed:
+                                task_info[field] = parsed[field]
+
+                    # Final fallback: raw event stdout if nothing was parsed
+                    if "stdout" not in task_info:
+                        task_info["stdout"] = event_stdout
+
+            failed.append(task_info)
 
     return failed
 
