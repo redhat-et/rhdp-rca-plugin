@@ -14,19 +14,19 @@ if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, str(Path(__file__).parent.parent))
     from scripts.config import Config
     from scripts.correlator import build_correlation_timeline, fetch_correlated_logs
+    from scripts.github_fetcher import GitHubAnalyzer, GitHubClient
     from scripts.job_parser import parse_job_log
     from scripts.log_fetcher import fetch_job_log
     from scripts.setup import print_checks, run_checks
-    from scripts.step4_fetch_github import GitHubClient, Step4Analyzer
     from scripts.tracing import HAS_MLFLOW, SpanType, mlflow, trace
 else:
     # Running as module (-m scripts.cli)
     from .config import Config
     from .correlator import build_correlation_timeline, fetch_correlated_logs
+    from .github_fetcher import GitHubAnalyzer, GitHubClient
     from .job_parser import parse_job_log
     from .log_fetcher import fetch_job_log
     from .setup import print_checks, run_checks
-    from .step4_fetch_github import GitHubClient, Step4Analyzer
     from .tracing import HAS_MLFLOW, SpanType, mlflow, trace
 
 
@@ -332,7 +332,7 @@ def cmd_analyze(args: argparse.Namespace, config: Config, span=None) -> int:
     else:
         try:
             github_client = GitHubClient(config.github_token)
-            analyzer = Step4Analyzer(job_id, analysis_dir, github_client)
+            analyzer = GitHubAnalyzer(job_id, analysis_dir, github_client)
             step4_result = analyzer.run()
             step4_path = save_step(analysis_dir, 4, step4_result)
             print(f"  GitHub fetches: {len(step4_result.get('github_fetches', []))}")

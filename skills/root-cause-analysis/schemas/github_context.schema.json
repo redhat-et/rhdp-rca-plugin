@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "GitHub Context Fetch",
-  "description": "Step 4: Fetched GitHub configuration and code files with 404 error handling",
+  "description": "Fetched GitHub configuration and code files with 404 error handling",
   "type": "object",
   "required": ["job_id", "job_metadata", "github_fetches"],
   "properties": {

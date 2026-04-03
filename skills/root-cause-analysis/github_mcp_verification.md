@@ -1,6 +1,6 @@
-# Post-Step4 GitHub MCP Verification for Errors
+# GitHub MCP Verification for Errors
 
-After step4 completes and outputs `step4_github_fetch_history.json`, Claude reasoning any errors (e.g., 404, timeout, HTTP errors) using MCP tools.
+After GitHub fetch step completes and outputs `step4_github_fetch_history.json`, Claude reasoning any errors (e.g., 404, timeout, HTTP errors) using MCP tools.
 
 **Verification Process**:
 1. **Check parent directories** using `mcp__github__get_file_contents` to list actual folder/file names (reveals case sensitivity, hyphens vs underscores)
