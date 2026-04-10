@@ -133,9 +133,7 @@ def classify_job_errors(
     return results
 
 
-def resolve_known_failures(
-    url: str | None = None, local_path: str | None = None
-) -> list[dict]:
+def resolve_known_failures(url: str | None = None, local_path: str | None = None) -> list[dict]:
     """Resolve and load known failure patterns.
 
     Args:
