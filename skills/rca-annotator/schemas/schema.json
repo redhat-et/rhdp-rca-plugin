@@ -3,7 +3,7 @@
   "annotated_at": "2026-03-19T12:05:00Z",
 
   "category_correct": true,
-  "category_comment": "Confirmed — credential issue matches the auth retry pattern.",
+  "category_comment": "Confirmed — matches the auth retry pattern.",
 
   "root_cause": {
     "category": "configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | credential | secrets | unknown",
@@ -12,15 +12,15 @@
   },
 
   "summary_accurate": true,
-  "summary_comment": "Clear and specific enough.",
+  "summary_comment": "Clear and specific.",
 
   "evidence": [
     {
-      "source": "step1 | step3 | step4 | aap_job | splunk_ocp | agnosticv_config | agnosticd_code",
-      "source_file": ".analysis/1234567/step1_job_context.json",
+      "source": "step1 | step3 | step4",
+      "source_file": ".analysis/<job_id>/step1_job_context.json",
       "json_path": "failed_tasks[0].duration",
       "exact_value": 917.565567,
-      "exact_quote": "kubeconfig: \"{{ _bookbag_kubeconfig | default(omit) }}\"",
+      "exact_quote": "optional — literal text for code/config",
       "line_number": 5,
       "github_path": "owner/repo:path/to/file.yml:line",
       "message": "The relevant log line or config snippet.",
@@ -33,9 +33,9 @@
 
   "difficulty": "easy | medium | hard",
   "difficulty_score": 5,
-  "difficulty_justification": "Requires correlating task code (+2) with missing configs (+0) and interpreting generic MODULE FAILURE (+2) and understanding default(omit) behavior (+1). Total: 5 points.",
+  "difficulty_justification": "Requires correlating task code (+2) with missing configs and interpreting generic MODULE FAILURE (+2). Total: 5.",
   "difficulty_appropriate": false,
-  "difficulty_comment": "Should be hard (8/10), not medium — requires deep variable precedence knowledge.",
+  "difficulty_comment": "Should be hard (8/10) — requires deep variable precedence knowledge.",
 
   "recommendations": [
     {
@@ -52,17 +52,11 @@
   "alternative_diagnoses": [
     {
       "category": "infrastructure",
-      "summary": "A plausible but wrong diagnosis an agent might produce.",
+      "summary": "A plausible but wrong diagnosis.",
       "why_wrong": "Why the evidence does not support this.",
       "plausibility": "high | medium | low",
-      "supporting_evidence": [
-        "Evidence that could support this diagnosis",
-        "Another piece of supporting evidence"
-      ],
-      "contradicting_evidence": [
-        "Evidence that contradicts this diagnosis",
-        "Another contradicting factor"
-      ]
+      "supporting_evidence": ["long timeout", "destroy action"],
+      "contradicting_evidence": ["test environment", "auth retry pattern"]
     }
   ]
 }
