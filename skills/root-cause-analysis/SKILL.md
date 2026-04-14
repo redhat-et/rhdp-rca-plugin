@@ -123,7 +123,7 @@ The `cli.py analyze` command automatically runs all steps:
 - **Step 3**: Correlate → Merge AAP and Splunk events into unified timeline
 - **Step 4**: Fetch GitHub files → Parse job metadata, fetch AgnosticV configs and AgnosticD workload code (requires `GITHUB_TOKEN` to be configured)
 
-**Outputs**: `.analysis/<job-id>/step1_job_context.json`, `step2_splunk_logs.json`, `step3_correlation.json`, `step4_github_fetch_history.json`
+**Outputs**: `.analysis/<job-id>/step1_job_context.json`, `step2_splunk_logs.json`, `step3_correlation.json`, `step4_github_fetch_history.json`, `classification.json`
 
 This skill automatically searches for job logs in the configured `JOB_LOGS_DIR`.
 
@@ -156,7 +156,8 @@ python3 -m venv .venv
 1. **REQUIRED**: `step1_job_context.json` - Job metadata and failed task details
 2. **REQUIRED**: `step3_correlation.json` - Correlated timeline with relevant pod logs (DO NOT read step2 unless needed)
 3. **REQUIRED**: `step4_github_fetch_history.json` - Configuration and code context
-4. **CONDITIONAL**: `step2_splunk_logs.json` - Only read if step3 indicates errors needing deeper investigation
+4. **REQUIRED**: `classification.json` - Known failure pattern matches (if present). Use these verified categories instead of guessing. If a match exists, use its `error_category` as the root cause category. If no matches, flag as novel/unclassified failure.
+5. **CONDITIONAL**: `step2_splunk_logs.json` - Only read if step3 indicates errors needing deeper investigation
 
 **Output**: `.analysis/<job-id>/step5_analysis_summary.json` 
 
@@ -180,7 +181,7 @@ python scripts/cli.py upload --job-id <job-id>
 
 ### Summary Requirements
 
-1. **Root Cause**: Category (`configuration|infrastructure|workload_bug|credential|resource|dependency`), summary, confidence
+1. **Root Cause**: Category — prefer `classification.json` categories when matched (`platform_failure|connectivity_failure|authentication_failure|resource_failure|timeout_failure|automation_failure|infrastructure_failure`). Fall back to (`configuration|infrastructure|application_bug|secrets|resource|dependency`) only for novel/unclassified errors. Include summary and confidence.
 2. **Evidence**: Supporting evidence from AAP logs, Splunk logs, and GitHub configs/code
    - **REQUIRED**: When `source` is `agnosticv_config` or `agnosticd_code`, **MUST** include `github_path` in format `owner/repo:path/to/file.yml:line`
    - Extract GitHub paths from step4:
@@ -264,6 +265,7 @@ See `schemas/summary.schema.json` for complete structure. Example:
 | 2 | `step2_splunk_logs.json` | Python |
 | 3 | `step3_correlation.json` | Python |
 | 4 | `step4_github_fetch_history.json` | Python (Optional Claude updates for MCP verification) |
+| — | `classification.json` | Python (known failure pattern matching) |
 | 5 | `step5_analysis_summary.json` | Claude |
 
 All files in `.analysis/<job-id>/`
