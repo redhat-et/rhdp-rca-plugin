@@ -93,22 +93,27 @@ This is the starting point for annotation. The user is reviewing the agent's wor
 
 ## Step 3: Interactive Annotation
 
-Walk through each question below with the user. **Present pre-populated answers based on `step5_analysis_summary.json`** before asking for confirmation. This makes annotation much faster - users just confirm or correct rather than answering from scratch.
+Walk through each question below with the user. **Present pre-populated answers based on `step5_analysis_summary.json`** before asking for confirmation. 
 
-Wait for the user's response before continuing to the next question.
+**IMPORTANT**: Use the `AskUserQuestion` tool for each question to enable headless execution in evaluation harnesses. Present the question with appropriate options where applicable. For open-ended questions, use a single free-text option.
 
 ### 1. Root Cause Category
 
-Present the agent's category and summary with a suggested answer:
+Present the agent's category and summary. Use AskUserQuestion to ask:
 
-> **The agent identified this as: `configuration`**
-> 
-> **Is this correct?** *(confirm with ✓, or provide the correct category)*
+```
+Question: "Is the root cause category correct?"
+Options: 
+- "Yes, <agent_category> is correct"
+- "No, should be: <other_category>" (for each valid category different from agent's)
+- "Other (specify)"
+```
 
 Valid categories: `configuration` | `infrastructure` | `application_bug` | `dependency` | `network` | `resource` | `cloud_api` | `credential` | `secrets` | `unknown`
 
-If user confirms: record `category_correct: true`
-If user corrects: record `category_correct: false` and the corrected category
+
+If user chooses option 1: record `category_correct: true`
+If user chooses option 2 or 3: record `category_correct: false` and the corrected category
 
 ### 2. Summary Accuracy
 
@@ -117,20 +122,27 @@ Present the agent's summary sentence:
 > **Agent's summary:**
 > "Missing Kubernetes cluster credentials due to intentionally empty configuration..."
 > 
-> **Is this accurate and specific?** *(Does it clearly describe what failed and why? Confirm with ✓ or suggest improvements)*
 
-If user has suggestions, capture them in `summary_comment`.
+```
+Question: "Is the summary accurate and specific?"
+Options:
+- "Yes, accurate as-is"
+- "Mostly accurate, minor refinement needed"
+- "Needs correction (specify)"
+```
+
 
 ### 3. Evidence
 
 Present the evidence items the agent cited in a numbered list:
 
-> **Agent cited 3 evidence items:**
-> 1. [step1] Task 'List project namespaces' failed after 917s
-> 2. [step4] Config files missing (404): prod.yaml, common.yaml
-> 3. [step3] No Splunk correlation - test environment
-> 
-> **Is any evidence missing or wrong?** *(Confirm with ✓ if complete, or specify what's missing/incorrect)*
+```
+Question: "Is any evidence missing or wrong?"
+Options:
+- "All evidence complete and accurate"
+- "Some evidence missing (specify)"
+- "Some evidence incorrect (specify)"
+```
 
 If the user wants to cross-check, read step1/step3/step4 and compare against what the agent cited. This is reference material for validation — not a re-analysis.
 
@@ -185,10 +197,17 @@ Present the calibration rubric and pre-calculate a suggested score based on the 
 > - **Confusion Factors:** Generic error "MODULE FAILURE" (+1)
 > - **Domain Expertise:** Needs basic K8s RBAC knowledge (+1)
 > - **Total: 4 → medium**
-> 
-> **Does this seem right?** *(Confirm with ✓, or provide corrected score with justification)*
+>
+Use AskUserQuestion to ask:
 
-The pre-calculated score helps users calibrate quickly. They can accept or adjust based on their assessment of these three dimensions.
+```
+Question: "Is the difficulty rating appropriate?"
+Options:
+- "Yes, score of <X>/10 is correct"
+- "Too easy, should be <Y>/10"
+- "Too hard, should be <Z>/10"
+```
+
 
 **IMPORTANT: Justification Format Requirement**
 
@@ -210,13 +229,20 @@ Do NOT accept justifications using ad-hoc notation like "Generic error (+2), dom
 
 ### 5. Alternative Diagnoses
 
-Present any alternative diagnoses the agent identified:
+Present any alternative diagnoses the agent identified. Use AskUserQuestion:
 
 > **Agent identified 0 alternative diagnoses.**
 > 
 > **Any plausible alternatives worth capturing?** *(e.g., "Could this have been a credential expiration issue instead?" — see example_annotations.md for guidance)*
 > 
 > Focus on plausible alternatives that were ruled out, not random guesses. High plausibility means hard to distinguish from the real root cause.
+
+Question: "Any alternative diagnoses to add or correct?"
+Options:
+- "No, alternatives are complete"
+- "Add alternative diagnosis (specify)"
+- "Correct existing alternative (specify)"
+```
 
 Alternative diagnosis format:
 
