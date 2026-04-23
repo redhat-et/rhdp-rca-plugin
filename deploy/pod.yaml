@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: claude-rca-eval
+  labels:
+    app: claude-rca-eval
+spec:
+  restartPolicy: Never
+  initContainers:
+    - name: setup-ssh
+      image: image-registry.openshift-image-registry.svc:5000/claude-ci-test/claude-rca:latest
+      command: ["bash", "-c"]
+      args:
+        - |
+          mkdir -p /workspace/.ssh /workspace/.claude /workspace/.config/gcloud
+          cp /tmp/ssh-secret/id_ed25519 /workspace/.ssh/id_ed25519
+          chmod 600 /workspace/.ssh/id_ed25519
+          cat > /workspace/.ssh/config <<EOF
+          Host ci-bastion
+            HostName $(cat /tmp/ssh-secret/bastion-hostname)
+            User $(cat /tmp/ssh-secret/bastion-username)
+            Port $(cat /tmp/ssh-secret/bastion-port)
+            IdentityFile /workspace/.ssh/id_ed25519
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+
+          Host ci-jumpbox
+            HostName $(cat /tmp/ssh-secret/jumpbox-hostname)
+            User $(cat /tmp/ssh-secret/jumpbox-username)
+            Port $(cat /tmp/ssh-secret/jumpbox-port)
+            IdentityFile /workspace/.ssh/id_ed25519
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 600 /workspace/.ssh/config
+          cp /tmp/claude-settings/settings.json /workspace/.claude/settings.json
+          cp /tmp/gcp-creds/application_default_credentials.json /workspace/.config/gcloud/application_default_credentials.json
+      volumeMounts:
+        - name: ssh-secret
+          mountPath: /tmp/ssh-secret
+          readOnly: true
+        - name: claude-settings
+          mountPath: /tmp/claude-settings
+          readOnly: true
+        - name: gcp-creds
+          mountPath: /tmp/gcp-creds
+          readOnly: true
+        - name: workspace
+          mountPath: /workspace
+  containers:
+    - name: claude
+      image: image-registry.openshift-image-registry.svc:5000/claude-ci-test/claude-rca:latest
+      command: ["sleep", "infinity"]
+      env:
+        - name: CLAUDE_CODE_USE_VERTEX
+          value: "1"
+        - name: CLOUD_ML_REGION
+          valueFrom:
+            secretKeyRef:
+              name: claude-vertex-creds
+              key: CLOUD_ML_REGION
+        - name: ANTHROPIC_VERTEX_PROJECT_ID
+          valueFrom:
+            secretKeyRef:
+              name: claude-vertex-creds
+              key: ANTHROPIC_VERTEX_PROJECT_ID
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/workspace/.config/gcloud/application_default_credentials.json"
+        - name: HOME
+          value: "/workspace"
+        - name: CLAUDE_CODE_ACCEPT_TOS
+          value: "true"
+      volumeMounts:
+        - name: workspace
+          mountPath: /workspace
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "500m"
+        limits:
+          memory: "2Gi"
+          cpu: "2"
+  volumes:
+    - name: workspace
+      emptyDir: {}
+    - name: gcp-creds
+      secret:
+        secretName: claude-vertex-creds
+        items:
+          - key: gcp-credentials
+            path: application_default_credentials.json
+    - name: claude-settings
+      secret:
+        secretName: rca-skill-config
+        items:
+          - key: settings.json
+            path: settings.json
+    - name: ssh-secret
+      secret:
+        secretName: ci-ssh-key

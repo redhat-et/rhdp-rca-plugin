@@ -42,3 +42,7 @@ htmlcov/
 .incidents/
 experiments/combine_rca_context/*/.analysis/
 experiments/combine_rca_context/*.xlsx
+
+# OpenShift runner secrets
+deploy/settings.json
+deploy/secrets.yaml
