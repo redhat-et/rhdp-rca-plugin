@@ -12,9 +12,11 @@
     "SPLUNK_OCP_INFRA_INDEX": "<splunk-ocp-infra-index>",
     "SPLUNK_VERIFY_SSL": "false",
     "GITHUB_TOKEN": "<your-github-token>",
-    "MLFLOW_PORT": "<localhost-port>",
-    "MLFLOW_EXPERIMENT_NAME": "<your-experiment-name>",
+    "MLFLOW_EXPERIMENT_NAME": "rhdp-rca-plugin-traces",
     "MLFLOW_CLAUDE_TRACING_ENABLED": "true",
+    "MLFLOW_TRACKING_URI": "<mlflow-tracking-uri>",
+    "MLFLOW_TRACKING_USERNAME": "<username>",
+    "MLFLOW_TRACKING_PASSWORD": "<password>",
     "MLFLOW_TAG_USER": "<your-username>"
   },
   "hooks": {
@@ -27,15 +29,11 @@
           },
           {
             "type": "command",
-            "command": "ssh -f -N -L $MLFLOW_PORT:localhost:5000 $JUMPBOX_URI"
-          },
-          {
-            "type": "command",
             "command": "if [ \"$MLFLOW_CLAUDE_TRACING_ENABLED\" = \"true\" ]; then if ! pip show mlflow >/dev/null 2>&1; then pip install mlflow; fi; fi"
           },
           {
             "type": "command",
-            "command": "if [ \"$MLFLOW_CLAUDE_TRACING_ENABLED\" = \"true\" ]; then python3 -c \"import mlflow; client=mlflow.tracking.MlflowClient(tracking_uri='http://127.0.0.1:$MLFLOW_PORT'); exp=client.get_experiment_by_name('$MLFLOW_EXPERIMENT_NAME'); client.restore_experiment(exp.experiment_id) if exp and exp.lifecycle_stage == 'deleted' else None\" && mlflow autolog claude -u http://127.0.0.1:$MLFLOW_PORT -n $MLFLOW_EXPERIMENT_NAME; fi"
+            "command": "if [ \"$MLFLOW_CLAUDE_TRACING_ENABLED\" = \"true\" ]; then python3 -c \"import mlflow; client=mlflow.tracking.MlflowClient(tracking_uri='$MLFLOW_TRACKING_URI'); exp=client.get_experiment_by_name('$MLFLOW_EXPERIMENT_NAME'); client.restore_experiment(exp.experiment_id) if exp and exp.lifecycle_stage == 'deleted' else None\" && mlflow autolog claude -u $MLFLOW_TRACKING_URI -n $MLFLOW_EXPERIMENT_NAME; fi"
           }
         ]
       }
@@ -46,16 +44,6 @@
           {
             "type": "command",
             "command": "python -c \"from mlflow.claude_code.hooks import stop_hook_handler; stop_hook_handler()\""
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "pkill -f \"ssh.*-L.*$MLFLOW_PORT.*localhost:5000.*$JUMPBOX_URI\" 2>/dev/null || true"
           }
         ]
       }
