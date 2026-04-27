@@ -132,6 +132,48 @@ def validate_annotation(
             if "confidence" in rc:
                 check_enum(rc["confidence"], "root_cause.confidence", enums, errors)
 
+    # data_sources_used
+    if "data_sources_used" in data:
+        dsu = data["data_sources_used"]
+        if not isinstance(dsu, dict):
+            errors.append("'data_sources_used' must be an object")
+        else:
+            for step in ["step1", "step2", "step3", "step4"]:
+                if step not in dsu:
+                    errors.append(f"data_sources_used missing required key: '{step}'")
+                elif not isinstance(dsu[step], dict):
+                    errors.append(f"data_sources_used.{step} must be an object")
+                else:
+                    for req_field in ["available", "used_in_evidence"]:
+                        if req_field not in dsu[step]:
+                            errors.append(
+                                f"data_sources_used.{step} missing required field: '{req_field}'"
+                            )
+                        elif not isinstance(dsu[step][req_field], bool):
+                            errors.append(
+                                f"data_sources_used.{step}.{req_field} must be a boolean"
+                            )
+
+            # Cross-check: if evidence references a step, used_in_evidence should be true
+            if "evidence" in data and isinstance(data["evidence"], list):
+                steps_in_evidence = {
+                    e.get("source") for e in data["evidence"] if isinstance(e, dict)
+                }
+                for step in ["step1", "step2", "step3", "step4"]:
+                    if step in dsu and isinstance(dsu[step], dict):
+                        claimed = dsu[step].get("used_in_evidence", False)
+                        actual = step in steps_in_evidence
+                        if actual and not claimed:
+                            errors.append(
+                                f"data_sources_used.{step}.used_in_evidence is false "
+                                f"but evidence array contains items from {step}"
+                            )
+                        elif claimed and not actual:
+                            errors.append(
+                                f"data_sources_used.{step}.used_in_evidence is true "
+                                f"but no evidence items reference {step}"
+                            )
+
     # evidence
     if "evidence" in data:
         if not isinstance(data["evidence"], list):

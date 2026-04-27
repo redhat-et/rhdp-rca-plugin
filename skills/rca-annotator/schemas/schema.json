@@ -3,7 +3,7 @@
   "title": "RCA Annotation",
   "description": "Human annotation of a root-cause-analysis output, capturing correctness, evidence traceability, difficulty, and alternative diagnoses.",
   "type": "object",
-  "required": ["job_id", "annotated_at", "category_correct", "root_cause", "summary_accurate", "evidence", "difficulty", "difficulty_score", "difficulty_justification", "difficulty_appropriate"],
+  "required": ["job_id", "annotated_at", "category_correct", "root_cause", "summary_accurate", "data_sources_used", "evidence", "difficulty", "difficulty_score", "difficulty_justification", "difficulty_appropriate"],
   "properties": {
     "job_id": {
       "type": "string",
@@ -60,6 +60,49 @@
       "type": "string",
       "description": "Explanation of what is accurate or what should be corrected."
     },
+    "data_sources_used": {
+      "type": "object",
+      "description": "Tracks which analysis step outputs were available and whether they contributed evidence to the annotation. Surfaces gaps so reviewers know which data sources were missing.",
+      "required": ["step1", "step2", "step3", "step4"],
+      "properties": {
+        "step1": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step1_job_context.json contained usable data." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step1." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, if applicable." }
+          }
+        },
+        "step2": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step2_splunk_logs.json contained usable data (not empty/errored)." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step2." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, e.g. 'Splunk not configured', 'GUID query failed', 'No OCP logs found'." }
+          }
+        },
+        "step3": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step3_correlation.json contained usable correlation data (not AAP-only with no Splunk data)." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step3." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, e.g. 'AAP-only, no Splunk data to correlate', 'Low confidence correlation'." }
+          }
+        },
+        "step4": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step4_github_fetch_history.json contained usable data." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step4." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, if applicable." }
+          }
+        }
+      }
+    },
     "evidence": {
       "type": "array",
       "description": "Evidence items with full traceability. Exactly one item must have is_root_cause: true.",
@@ -70,7 +113,7 @@
         "properties": {
           "source": {
             "type": "string",
-            "enum": ["step1", "step3", "step4"],
+            "enum": ["step1", "step2", "step3", "step4"],
             "description": "Which analysis step the evidence comes from."
           },
           "source_file": {

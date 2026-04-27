@@ -15,7 +15,7 @@ A structured annotation tool that presents the `root-cause-analysis` agent's dia
 | | `root-cause-analysis` (Agent) | `rca-annotator` (Annotation tool) |
 |---|---|---|
 | **Purpose** | Diagnose failures for users | Capture human-labeled ground-truth data |
-| **Reads** | Logs, Splunk, GitHub (live) | Step 1/3/4/5 output files (offline) |
+| **Reads** | Logs, Splunk, GitHub (live) | Step 1/2/3/4/5 output files (offline) |
 | **Output** | Human-readable diagnosis | Structured `annotation.json` |
 
 **Use when**: a `root-cause-analysis` run is complete and you want to annotate its output as correct, incorrect, or partially correct — for evaluation, benchmarking, or dataset building.
@@ -31,6 +31,7 @@ Verify root-cause-analysis has been completed.
 - **Required files** in `.analysis/<job_id>/`:
   - `step5_analysis_summary.json` — Agent's final diagnosis (primary input)
   - `step1_job_context.json` — Job metadata, failed tasks
+  - `step2_splunk_logs.json` — Raw Splunk OCP pod logs (may be empty/errored if Splunk was not configured)
   - `step3_correlation.json` — Timeline with AAP + Splunk events
   - `step4_github_fetch_history.json` — Configuration and code context
 
@@ -134,7 +135,36 @@ Options:
 
 ### 3. Evidence
 
-Present the evidence items the agent cited in a numbered list:
+Before presenting evidence to the user, read the source step files to cross-reference and enrich the agent's evidence:
+
+1. Read `step1_job_context.json` — job metadata and failed tasks
+2. Read `step2_splunk_logs.json` — check for Splunk errors, OCP logs, or skip/empty indicators
+3. Read `step3_correlation.json` — check timeline events, correlation confidence, and matching pods
+4. Read `step4_github_fetch_history.json` — configuration and code context
+
+**Present a data availability summary** so the user knows what sources were available:
+
+> **Data sources for evidence:**
+> - Step 1 (Job context): Available — <N> failed tasks
+> - Step 2 (Splunk logs): Skipped/Empty/Error — <reason> *(or)* Available — <N> OCP logs, <N> error logs
+> - Step 3 (Correlation): AAP-only — no Splunk data to correlate *(or)* Available — <N> timeline events, confidence: <level>
+> - Step 4 (GitHub configs): Available — <N> configs fetched *(or)* Skipped — <reason>
+
+**IMPORTANT — Flag unused steps**: If step2 or step3 data was unavailable, empty, errored, or not referenced by any evidence item, **explicitly warn the user**:
+
+> **Warning:** Step 2 (Splunk logs) was not utilized in this annotation — <reason, e.g. "Splunk was not configured", "GUID query returned no results", "file contained only errors">. This means the diagnosis relies solely on AAP logs and GitHub configuration without independent infrastructure log corroboration.
+
+> **Warning:** Step 3 (Correlation) was not utilized in this annotation — <reason, e.g. "AAP-only timeline, no Splunk data to correlate", "correlation confidence too low">. There is no cross-source timeline validation for this diagnosis.
+
+These warnings help the user understand the evidence limitations and decide whether the diagnosis confidence should be adjusted downward.
+
+Then present the evidence items the agent cited in a numbered list. **Proactively cross-reference** against the source data:
+
+- **Check step2** for Splunk errors or logs the agent did not cite. For example, if step2 contains `"errors": ["GUID query failed: ..."]`, this is evidence of infrastructure issues (DNS, network) that may corroborate or contradict the agent's diagnosis.
+- **Check step3** for timeline events the agent omitted. If step3 shows correlated pod failures or low-confidence correlation, note this for the user.
+- **Note discrepancies**: e.g., the agent cites "network connectivity" as root cause but step2/step3 contain corroborating network errors that were not included as evidence.
+
+If step2 or step3 contain relevant data the agent did **not** cite, mention it to the user as potentially missing evidence before asking the question.
 
 ```
 Question: "Is any evidence missing or wrong?"
@@ -144,20 +174,18 @@ Options:
 - "Some evidence incorrect (specify)"
 ```
 
-If the user wants to cross-check, read step1/step3/step4 and compare against what the agent cited. This is reference material for validation — not a re-analysis.
-
 When user identifies missing evidence, help them add it with full traceability (see example_annotations.md for format).
 
 **Evidence traceability format** (for any new or corrected evidence items the user provides):
 
 ```json
 {
-  "source": "step1 | step3 | step4",
-  "source_file": ".analysis/<job_id>/step1_job_context.json",
-  "json_path": "failed_tasks[0].duration",
-  "exact_value": 920.0,
+  "source": "step1 | step2 | step3 | step4",
+  "source_file": ".analysis/<job_id>/step2_splunk_logs.json",
+  "json_path": "errors[0]",
+  "exact_value": "<the literal error string from the file>",
   "exact_quote": "optional — literal text for code/config",
-  "line_number": 5,
+  "line_number": 12,
   "github_path": "owner/repo:path/to/file.yml:line",
   "message": "The relevant log line or config snippet.",
   "confidence": "high | medium | low",
@@ -270,6 +298,22 @@ After all questions are answered, verify before writing:
 - All evidence has traceability (source_file, json_path, exact_value/quote)
 - Difficulty score calculated with justification
 - Alternative diagnoses have plausibility levels
+- `data_sources_used` populated for all four steps
+
+**Populate `data_sources_used`** by checking each step file and comparing against the evidence array:
+
+```json
+"data_sources_used": {
+  "step1": { "available": true, "used_in_evidence": true },
+  "step2": { "available": false, "used_in_evidence": false, "note": "Splunk not configured; file contained only errors" },
+  "step3": { "available": false, "used_in_evidence": false, "note": "AAP-only timeline, no Splunk data to correlate" },
+  "step4": { "available": true, "used_in_evidence": true }
+}
+```
+
+For each step: set `available` based on whether the file contained usable data (not empty, not error-only), and `used_in_evidence` based on whether any evidence item has `"source": "stepN"`. Include a `note` explaining why any step was unavailable or unused.
+
+**Set `annotated_at` to the current wall-clock time** in full ISO 8601 format with hours, minutes, and seconds — e.g. `"2026-04-27T18:34:00Z"`. Do NOT use midnight (`T00:00:00Z`) or date-only values. Run `date -u +%Y-%m-%dT%H:%M:%SZ` to get the correct UTC timestamp.
 
 Write `annotation.json` to `.analysis/<job_id>/`.
 
