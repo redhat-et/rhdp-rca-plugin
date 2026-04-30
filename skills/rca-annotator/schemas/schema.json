@@ -1,68 +1,261 @@
 {
-  "job_id": "1234567",
-  "annotated_at": "2026-03-19T12:05:00Z",
-
-  "category_correct": true,
-  "category_comment": "Confirmed — credential issue matches the auth retry pattern.",
-
-  "root_cause": {
-    "category": "configuration | infrastructure | application_bug | dependency | network | resource | cloud_api | credential | secrets | unknown",
-    "summary": "One sentence describing what failed and why.",
-    "confidence": "high | medium | low"
-  },
-
-  "summary_accurate": true,
-  "summary_comment": "Clear and specific enough.",
-
-  "evidence": [
-    {
-      "source": "step1 | step3 | step4 | aap_job | splunk_ocp | agnosticv_config | agnosticd_code",
-      "source_file": ".analysis/1234567/step1_job_context.json",
-      "json_path": "failed_tasks[0].duration",
-      "exact_value": 917.565567,
-      "exact_quote": "kubeconfig: \"{{ _bookbag_kubeconfig | default(omit) }}\"",
-      "line_number": 5,
-      "github_path": "owner/repo:path/to/file.yml:line",
-      "message": "The relevant log line or config snippet.",
-      "confidence": "high | medium | low",
-      "is_root_cause": true
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RCA Annotation",
+  "description": "Human annotation of a root-cause-analysis output, capturing correctness, evidence traceability, difficulty, and alternative diagnoses.",
+  "type": "object",
+  "required": ["job_id", "annotated_at", "category_correct", "root_cause", "summary_accurate", "data_sources_used", "evidence", "difficulty", "difficulty_score", "difficulty_justification", "difficulty_appropriate"],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "description": "The AAP job ID being annotated."
+    },
+    "annotated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of when the annotation was created."
+    },
+    "category_correct": {
+      "type": "boolean",
+      "description": "Whether the agent's root cause category was correct."
+    },
+    "category_comment": {
+      "type": "string",
+      "description": "Explanation of why the category is correct or what it should be."
+    },
+    "root_cause": {
+      "type": "object",
+      "description": "The corrected (or confirmed) root cause.",
+      "required": ["category", "summary", "confidence"],
+      "properties": {
+        "category": {
+          "type": "string",
+          "enum": [
+            "configuration",
+            "infrastructure",
+            "application_bug",
+            "dependency",
+            "network",
+            "resource",
+            "cloud_api",
+            "credential",
+            "secrets",
+            "unknown"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "description": "One sentence describing what failed and why."
+        },
+        "confidence": {
+          "type": "string",
+          "enum": ["high", "medium", "low"]
+        }
+      }
+    },
+    "summary_accurate": {
+      "type": "boolean",
+      "description": "Whether the agent's summary accurately described the root cause."
+    },
+    "summary_comment": {
+      "type": "string",
+      "description": "Explanation of what is accurate or what should be corrected."
+    },
+    "data_sources_used": {
+      "type": "object",
+      "description": "Tracks which analysis step outputs were available and whether they contributed evidence to the annotation. Surfaces gaps so reviewers know which data sources were missing.",
+      "required": ["step1", "step2", "step3", "step4"],
+      "properties": {
+        "step1": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step1_job_context.json contained usable data." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step1." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, if applicable." }
+          }
+        },
+        "step2": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step2_splunk_logs.json contained usable data (not empty/errored)." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step2." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, e.g. 'Splunk not configured', 'GUID query failed', 'No OCP logs found'." }
+          }
+        },
+        "step3": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step3_correlation.json contained usable correlation data (not AAP-only with no Splunk data)." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step3." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, e.g. 'AAP-only, no Splunk data to correlate', 'Low confidence correlation'." }
+          }
+        },
+        "step4": {
+          "type": "object",
+          "required": ["available", "used_in_evidence"],
+          "properties": {
+            "available": { "type": "boolean", "description": "Whether step4_github_fetch_history.json contained usable data." },
+            "used_in_evidence": { "type": "boolean", "description": "Whether any evidence item references step4." },
+            "note": { "type": "string", "description": "Why this source was unavailable or unused, if applicable." }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Evidence items with full traceability. Exactly one item must have is_root_cause: true.",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["source", "source_file", "json_path", "message", "confidence", "is_root_cause"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": ["step1", "step2", "step3", "step4"],
+            "description": "Which analysis step the evidence comes from."
+          },
+          "source_file": {
+            "type": "string",
+            "description": "Relative path to the analysis file, e.g. .analysis/<job_id>/step1_job_context.json"
+          },
+          "json_path": {
+            "type": "string",
+            "description": "Dot/bracket path to the value within the source file, e.g. failed_tasks[0].duration"
+          },
+          "exact_value": {
+            "description": "Literal value at the json_path (use for numbers, booleans, short strings)."
+          },
+          "exact_quote": {
+            "type": "string",
+            "description": "Verbatim text at the json_path (use for log lines, error messages, config snippets)."
+          },
+          "line_number": {
+            "type": "integer",
+            "description": "Optional line number within the source file."
+          },
+          "github_path": {
+            "type": "string",
+            "description": "GitHub file reference in format 'owner/repo:path/to/file.yml' or 'owner/repo:path/to/file.yml:line'."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable description of what this evidence shows."
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "is_root_cause": {
+            "type": "boolean",
+            "description": "True for the single evidence item that most directly caused the failure."
+          }
+        }
+      }
+    },
+    "evidence_feedback": {
+      "type": "string",
+      "description": "Free-text feedback on the completeness or accuracy of the evidence set."
+    },
+    "difficulty": {
+      "type": "string",
+      "enum": ["easy", "medium", "hard"],
+      "description": "Overall difficulty of diagnosing this failure."
+    },
+    "difficulty_score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Numeric difficulty score (0-10) derived from the rubric."
+    },
+    "difficulty_justification": {
+      "type": "string",
+      "description": "Step-by-step rubric breakdown showing how the score was reached."
+    },
+    "difficulty_appropriate": {
+      "type": "boolean",
+      "description": "Whether the agent's stated difficulty matches the rubric score."
+    },
+    "difficulty_comment": {
+      "type": "string",
+      "description": "Explanation if difficulty_appropriate is false."
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["priority", "action"],
+        "properties": {
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "action": {
+            "type": "string",
+            "description": "Specific, actionable step to fix or prevent the issue."
+          },
+          "file": {
+            "type": "string",
+            "description": "File to change, or 'N/A' for manual operations."
+          }
+        }
+      }
+    },
+    "contributing_factors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Conditions that made the failure more likely or harder to diagnose."
+    },
+    "alternative_diagnoses": {
+      "type": "array",
+      "description": "Plausible alternative root causes that were considered and ruled out.",
+      "items": {
+        "type": "object",
+        "required": ["category", "summary", "why_wrong", "plausibility"],
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "configuration",
+              "infrastructure",
+              "application_bug",
+              "dependency",
+              "network",
+              "resource",
+              "cloud_api",
+              "credential",
+              "secrets",
+              "unknown"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "description": "One sentence describing the alternative diagnosis."
+          },
+          "why_wrong": {
+            "type": "string",
+            "description": "Which evidence contradicts this diagnosis or why it was ruled out."
+          },
+          "plausibility": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+            "description": "How convincing this alternative was before being ruled out."
+          },
+          "supporting_evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Evidence items that superficially support this diagnosis."
+          },
+          "contradicting_evidence": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Evidence items that rule this diagnosis out."
+          }
+        }
+      }
     }
-  ],
-
-  "evidence_feedback": "Missing the kubeconfig 404 from step4 github_fetches.",
-
-  "difficulty": "easy | medium | hard",
-  "difficulty_score": 5,
-  "difficulty_justification": "Requires correlating task code (+2) with missing configs (+0) and interpreting generic MODULE FAILURE (+2) and understanding default(omit) behavior (+1). Total: 5 points.",
-  "difficulty_appropriate": false,
-  "difficulty_comment": "Should be hard (8/10), not medium — requires deep variable precedence knowledge.",
-
-  "recommendations": [
-    {
-      "priority": "high | medium | low",
-      "action": "What should be done to fix it.",
-      "file": "path/to/file.yml"
-    }
-  ],
-
-  "contributing_factors": [
-    "Factor that made the failure more likely or harder to diagnose."
-  ],
-
-  "alternative_diagnoses": [
-    {
-      "category": "infrastructure",
-      "summary": "A plausible but wrong diagnosis an agent might produce.",
-      "why_wrong": "Why the evidence does not support this.",
-      "plausibility": "high | medium | low",
-      "supporting_evidence": [
-        "Evidence that could support this diagnosis",
-        "Another piece of supporting evidence"
-      ],
-      "contradicting_evidence": [
-        "Evidence that contradicts this diagnosis",
-        "Another contradicting factor"
-      ]
-    }
-  ]
+  }
 }

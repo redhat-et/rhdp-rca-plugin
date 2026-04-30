@@ -69,6 +69,7 @@ def verify_required_files(analysis_dir: Path) -> list[str]:
         "step1_job_context.json",
         "step3_correlation.json",
         "step4_github_fetch_history.json",
+        "step5_analysis_summary.json",
     ]
 
     missing = []
@@ -143,7 +144,7 @@ def download_from_jumpbox(job_id: str, jumpbox_uri: str | None = None) -> bool:
             )
             remote_dir = candidate
             break
-        except FileExistsError as e:
+        except FileNotFoundError as e:
             print(f" Error: Command not found:{e.filename}")
             return False
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
