@@ -308,26 +308,47 @@ def _get_tracking_uri() -> str | None:
 
 def check_mlflow() -> dict:
     """Check MLFlow tracing configuration."""
-    enabled = os.environ.get("MLFLOW_CLAUDE_TRACING_ENABLED", "")
+    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "")
+    username = os.environ.get("MLFLOW_TRACKING_USERNAME", "")
+    password = os.environ.get("MLFLOW_TRACKING_PASSWORD", "")
     experiment = os.environ.get("MLFLOW_EXPERIMENT_NAME", "")
     tag_user = os.environ.get("MLFLOW_TAG_USER", "")
 
     env_vars = []
     issues = []
 
-    if enabled.lower() != "true":
-        issues.append("MLFLOW_CLAUDE_TRACING_ENABLED not set to 'true'")
+    if is_placeholder(tracking_uri):
+        issues.append("MLFLOW_TRACKING_URI not configured")
         env_vars.append(
             {
-                "name": "MLFLOW_CLAUDE_TRACING_ENABLED",
-                "prompt": "Enable MLFlow tracing (true/false)",
-                "default": "true",
+                "name": "MLFLOW_TRACKING_URI",
+                "prompt": "MLflow tracking URI (e.g. https://mlflow.example.com)",
+            }
+        )
+    if is_placeholder(username):
+        issues.append("MLFLOW_TRACKING_USERNAME not configured")
+        env_vars.append(
+            {
+                "name": "MLFLOW_TRACKING_USERNAME",
+                "prompt": "MLflow tracking username",
+            }
+        )
+    if is_placeholder(password):
+        issues.append("MLFLOW_TRACKING_PASSWORD not configured")
+        env_vars.append(
+            {
+                "name": "MLFLOW_TRACKING_PASSWORD",
+                "prompt": "MLflow tracking password",
             }
         )
     if is_placeholder(experiment):
         issues.append("MLFLOW_EXPERIMENT_NAME not configured")
         env_vars.append(
-            {"name": "MLFLOW_EXPERIMENT_NAME", "prompt": "MLFlow experiment name for tracing"}
+            {
+                "name": "MLFLOW_EXPERIMENT_NAME",
+                "prompt": "MLFlow experiment name for tracing",
+                "optional": True,
+            }
         )
     if is_placeholder(tag_user):
         issues.append("MLFLOW_TAG_USER not configured")
@@ -351,7 +372,7 @@ def check_mlflow() -> dict:
     return {
         "name": "MLFlow",
         "status": "ok",
-        "message": f"experiment={experiment}",
+        "message": f"uri={tracking_uri}, experiment={experiment}",
     }
 
 
@@ -530,47 +551,35 @@ def check_mlflow_server() -> dict:
 
 
 def check_mlflow_hooks(repo_root: Path) -> dict:
-    """Check if MLflow Stop and SessionStart hooks are configured in settings.json."""
-    tracking_uri = os.environ.get("MLFLOW_TRACKING_URI", "")
-    if tracking_uri and not is_placeholder(tracking_uri):
-        return {
-            "name": "MLflow hooks",
-            "status": "ok",
-            "message": "mlflow autolog configured via MLFLOW_TRACKING_URI",
-        }
+    """Check if MLflow Stop hook is configured in settings.json."""
+    import subprocess
 
-    for settings_name in ["settings.json", "settings.local.json"]:
-        settings_path = repo_root / ".claude" / settings_name
-        if settings_path.exists():
-            try:
-                with open(settings_path) as f:
-                    settings = json.load(f)
-                hooks = settings.get("hooks", {})
-                has_stop = "Stop" in hooks
-                has_session = "SessionStart" in hooks
-                if has_stop and has_session:
-                    return {
-                        "name": "MLflow hooks",
-                        "status": "ok",
-                        "message": f"Stop + SessionStart registered in {settings_name}",
-                    }
-                missing = []
-                if not has_stop:
-                    missing.append("Stop")
-                if not has_session:
-                    missing.append("SessionStart")
-                return {
-                    "name": "MLflow hooks",
-                    "status": "missing",
-                    "message": f"Missing hooks: {', '.join(missing)}. See settings.example.json",
-                }
-            except (json.JSONDecodeError, OSError):
-                pass
+    search_roots = [repo_root]
+    cwd = Path.cwd()
+    if cwd != repo_root:
+        search_roots.insert(0, cwd)
+
+    for root in search_roots:
+        for settings_name in ["settings.json", "settings.local.json"]:
+            settings_path = root / ".claude" / settings_name
+            if settings_path.exists():
+                try:
+                    with open(settings_path) as f:
+                        settings = json.load(f)
+                    hooks = settings.get("hooks", {})
+                    if "Stop" in hooks:
+                        return {
+                            "name": "MLflow hooks",
+                            "status": "ok",
+                            "message": f"Stop hook registered in {settings_name}",
+                        }
+                except (json.JSONDecodeError, OSError):
+                    pass
 
     return {
         "name": "MLflow hooks",
         "status": "missing",
-        "message": "Stop and SessionStart hooks not found in settings. See settings.example.json",
+        "message": "Missing Stop hook. See settings.example.json",
     }
 
 
