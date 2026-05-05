@@ -12,6 +12,7 @@ from pathlib import Path
 if __name__ == "__main__" and __package__ is None:
     # Running directly as scripts/cli.py - add parent to path
     sys.path.insert(0, str(Path(__file__).parent.parent))
+    from scripts.classify import classify_job_errors, resolve_known_failures
     from scripts.config import Config
     from scripts.correlator import build_correlation_timeline, fetch_correlated_logs
     from scripts.github_fetcher import GitHubAnalyzer, GitHubClient
@@ -22,6 +23,7 @@ if __name__ == "__main__" and __package__ is None:
     from scripts.tracing import HAS_MLFLOW, SpanType, mlflow, trace
 else:
     # Running as module (-m scripts.cli)
+    from .classify import classify_job_errors, resolve_known_failures
     from .config import Config
     from .correlator import build_correlation_timeline, fetch_correlated_logs
     from .github_fetcher import GitHubAnalyzer, GitHubClient
@@ -268,6 +270,39 @@ def cmd_analyze(args: argparse.Namespace, config: Config, span=None) -> int:
                 span.set_outputs({"error": error_message})
             return 1
 
+    # Classify errors against known failure patterns (optional)
+    print("\n[Classify] Matching errors against known failure patterns...")
+    known_failures = resolve_known_failures(
+        url=getattr(args, "known_failures_url", None),
+        local_path=getattr(args, "known_failures_file", None),
+    )
+    classification_path = analysis_dir / "classification.json"
+    classification_result: dict = {
+        "patterns_loaded": len(known_failures),
+        "matches": [],
+    }
+    if known_failures:
+        classifications = classify_job_errors(job_context, correlation, known_failures)
+        classification_result["matches"] = classifications
+        if classifications:
+            print(f"  Matched {len(classifications)} error(s) against known patterns")
+            for c in classifications:
+                print(f"    - {c['error_category']}: {c['failure_description']}")
+        else:
+            print("  No matches — errors may be novel/unclassified")
+    else:
+        classification_result["skipped"] = True
+        classification_result["reason"] = "no known failure patterns configured"
+        print("  Skipped: no known failure patterns configured (optional)")
+        print(
+            "  Hint: Use --known-failures-file <path> or --known-failures-url <url>,"
+            " or set KNOWN_FAILED_YAML_URL / KNOWN_FAILED_YAML"
+            " in .claude/settings.local.json env block"
+        )
+    with open(classification_path, "w") as f:
+        json.dump(classification_result, f, indent=2)
+    print(f"  Output: {classification_path}")
+
     # Print summary
     print("\n" + "=" * 60)
     print("Analysis Complete")
@@ -478,6 +513,14 @@ def main() -> int:
         "--fetch",
         action="store_true",
         help="Fetch job log from remote server via SSH if not found locally",
+    )
+    analyze_parser.add_argument(
+        "--known-failures-url",
+        help="URL to fetch known_failed.yaml from (overrides KNOWN_FAILED_YAML_URL env var)",
+    )
+    analyze_parser.add_argument(
+        "--known-failures-file",
+        help="Local path to known_failed.yaml (overrides KNOWN_FAILED_YAML env var)",
     )
 
     # parse command

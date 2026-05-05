@@ -46,7 +46,8 @@ Add the following environment variables to your Claude Code settings file:
     "SPLUNK_INDEX": "your_splunk_index",
     "SPLUNK_OCP_APP_INDEX": "your_ocp_app_index",
     "SPLUNK_OCP_INFRA_INDEX": "your_ocp_infra_index",
-    "SPLUNK_VERIFY_SSL": "false"
+    "SPLUNK_VERIFY_SSL": "false",
+    "KNOWN_FAILED_YAML_URL": "https://api.github.com/repos/your-org/your-repo/contents/path/to/known_failed.yaml"
   }
 }
 ```
@@ -60,6 +61,7 @@ Update the values:
 - `SPLUNK_USERNAME` / `SPLUNK_PASSWORD` - Your Splunk credentials
 - `SPLUNK_INDEX` - Default index for AAP logs
 - `SPLUNK_OCP_APP_INDEX` / `SPLUNK_OCP_INFRA_INDEX` - OCP log indices
+- `KNOWN_FAILED_YAML_URL` - URL to `known_failed.yaml` for error classification (e.g., GitHub API content URL). Uses `GITHUB_TOKEN` for authentication if the URL points to `api.github.com`. The file is cached locally after first fetch. Alternatively, set `KNOWN_FAILED_YAML` to a local file path. Can also be passed via `--known-failures-url` or `--known-failures-file` CLI flags.
 
 ### 3. Configure SSH for auto-fetch (optional)
 
@@ -222,7 +224,7 @@ All steps are executed automatically by the `cli.py analyze` command:
 
 ### Step 5: Analyze and Generate Summary (Claude)
 
-**Input files**: Read outputs from steps 1-4 (`step1_job_context.json`, `step3_correlation.json`, `step4_github_fetch_history.json`, and if needed, `step2_splunk_logs.json`).
+**Input files**: Read outputs from steps 1-4 (`step1_job_context.json`, `step3_correlation.json`, `step4_github_fetch_history.json`, `classification.json`, and if needed, `step2_splunk_logs.json`).
 
 **Analysis Guidelines**:
 - **Configuration Analysis**: Variable precedence (role defaults → common.yaml → platform/account.yaml → platform/catalog/env.yaml), check for conflicts, missing variables, secrets references
@@ -259,6 +261,7 @@ Analysis results are saved to `.analysis/<job-id>/`:
 | `step2_splunk_logs.json` | Correlated Splunk pod logs | Python |
 | `step3_correlation.json` | Unified timeline with correlation proof | Python |
 | `step4_github_fetch_history.json` | GitHub fetch results (configs and workload code) | Python (Claude updates for MCP verification) |
+| `classification.json` | Known failure pattern matches | Python |
 | `step5_analysis_summary.json` | Root cause summary with recommendations | Claude |
 
 ## Correlation Methods
