@@ -42,3 +42,8 @@ htmlcov/
 .incidents/
 experiments/combine_rca_context/*/.analysis/
 experiments/combine_rca_context/*.xlsx
+.env
+experiments/batch_rca_headless/.env
+
+# Batch RCA automation deployment files (environment-specific)
+experiments/batch-rca-automation/*.yaml
