@@ -6,13 +6,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+import mlflow
+from mlflow.entities import SpanType
+
 # --- Defaults: adjust if needed ---
 REMOTE_HOST = os.environ.get("REMOTE_HOST")
 REMOTE_DIR = os.environ.get("REMOTE_DIR")
 DEFAULT_LOCAL_DIR = Path.home() / "etl-logs"
 
 
-def fetch_job_logs(job_numbers: list[str], local_dir: Path) -> None:
+@mlflow.trace(name="Fetch job logs by number", span_type=SpanType.RETRIEVER)
+def fetch_job_logs(job_numbers: list[str], local_dir: Path) -> dict:
     """
     Fetch specific job log files by job number (e.g., job_1234567).
 
@@ -72,7 +76,6 @@ def fetch_job_logs(job_numbers: list[str], local_dir: Path) -> None:
     if not files_found:
         print(f"[WARNING] No files found for job numbers: {', '.join(normalized_jobs)}")
         print("[INFO] Make sure the job numbers are correct and files exist on the remote server")
-        return
 
     print(f"[INFO] Found {len(files_found)} file(s):")
     for f in files_found:
@@ -102,8 +105,15 @@ def fetch_job_logs(job_numbers: list[str], local_dir: Path) -> None:
     except subprocess.CalledProcessError as e:
         print("[ERROR] rsync failed")
         raise e
+    return {
+        "status": "success",
+        "local_dir": str(local_dir),
+        "job_numbers": normalized_jobs,
+        "files_found": len(files_found),
+    }
 
 
+@mlflow.trace(name="Logs fetcher by job", span_type=SpanType.TOOL)
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Fetch specific AAP2 ETL log files by job number via ssh + rsync."
@@ -122,7 +132,26 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    fetch_job_logs(
+    span = mlflow.get_current_active_span()
+    if span:
+        span.set_inputs(
+            {
+                "request": f"log-fetcher via jobs {args}",
+                "job_numbers": args.job_numbers,
+                "local_dir": str(args.local_dir),
+            }
+        )
+
+    mlflow.update_current_trace(
+        metadata={
+            "mlflow.trace.session": f"{os.environ.get('CLAUDE_SESSION_ID')}",
+            "mlflow.trace.user": os.environ.get("MLFLOW_TAG_USER"),
+            "mlflow.source.name": "logs-fetcher",
+            "mlflow.source.git.repoURL": "https://github.com/redhat-et/aiops-skills/blob/main/skills/logs-fetcher/SKILL.md",
+        },
+    )
+
+    return fetch_job_logs(
         job_numbers=args.job_numbers,
         local_dir=args.local_dir,
     )

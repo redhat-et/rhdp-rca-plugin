@@ -9,11 +9,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import mlflow
+from mlflow.entities import SpanType
+
 REMOTE_HOST = os.environ.get("REMOTE_HOST")
 REMOTE_DIR = os.environ.get("REMOTE_DIR")
 DEFAULT_LOCAL_DIR = Path(os.environ.get("DEFAULT_LOCAL_DIR", Path.home() / "aiops_extracted_logs"))
 
 
+@mlflow.trace(name="Parse datetime string", span_type=SpanType.PARSER)
 def parse_datetime(dt_str: str) -> datetime:
     """
     Parse datetime string in ISO format (YYYY-MM-DD HH:MM:SS or YYYY-MM-DD).
@@ -32,6 +36,7 @@ def parse_datetime(dt_str: str) -> datetime:
     raise ValueError(f"Invalid datetime format: {dt_str}. Expected YYYY-MM-DD [HH:MM[:SS]]")
 
 
+@mlflow.trace(name="Build remote ls command", span_type=SpanType.TOOL)
 def build_remote_ls_command(
     mode: str,
     order: str,
@@ -104,6 +109,7 @@ def build_remote_ls_command(
     return cmd
 
 
+@mlflow.trace(name="Run SSH sync", span_type=SpanType.RETRIEVER)
 def run_sync(
     local_dir: Path,
     mode: str,
@@ -168,7 +174,16 @@ def run_sync(
             ssh_proc.stdout.close()
         ssh_proc.wait()
 
+    return {
+        "status": "success",
+        "local_dir": str(local_dir),
+        "mode": mode,
+        "order": order,
+        "limit": limit,
+    }
 
+
+@mlflow.trace(name="Logs fetcher by ssh", span_type=SpanType.TOOL)
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Fetch AAP2 ETL log files via ssh + rsync.")
     parser.add_argument(
@@ -210,7 +225,30 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    run_sync(
+    span = mlflow.get_current_active_span()
+    if span:
+        span.set_inputs(
+            {
+                "request": f"log-fetcher via ssh{args}",
+                "local_dir": str(args.local_dir),
+                "mode": args.mode,
+                "order": args.order,
+                "limit": args.limit,
+                "start_time": args.start_time,
+                "end_time": args.end_time,
+            }
+        )
+
+    mlflow.update_current_trace(
+        metadata={
+            "mlflow.trace.session": f"{os.environ.get('CLAUDE_SESSION_ID')}",
+            "mlflow.trace.user": os.environ.get("MLFLOW_TAG_USER"),
+            "mlflow.source.name": "logs-fetcher",
+            "mlflow.source.git.repoURL": "https://github.com/redhat-et/aiops-skills/blob/main/skills/logs-fetcher/SKILL.md",
+        },
+    )
+
+    result = run_sync(
         local_dir=args.local_dir,
         mode=args.mode,
         order=args.order,
@@ -218,6 +256,8 @@ def main(argv=None):
         start_time=args.start_time,
         end_time=args.end_time,
     )
+
+    return result
 
 
 if __name__ == "__main__":

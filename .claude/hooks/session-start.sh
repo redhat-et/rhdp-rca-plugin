@@ -4,6 +4,10 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id')
 
 if [ -n "$CLAUDE_ENV_FILE" ]; then
   echo "export CLAUDE_SESSION_ID='$SESSION_ID'" >> "$CLAUDE_ENV_FILE"
+  echo "export MLFLOW_TAG_USER='$MLFLOW_TAG_USER'" >> "$CLAUDE_ENV_FILE"
+  echo "export MLFLOW_TRACKING_URI='http://127.0.0.1:$MLFLOW_PORT'" >> "$CLAUDE_ENV_FILE"
+  echo "export MLFLOW_EXPERIMENT_NAME='$MLFLOW_EXPERIMENT_NAME'" >> "$CLAUDE_ENV_FILE"
+  echo "export MLFLOW_TRACING_ENABLED='$MLFLOW_TRACING_ENABLED'" >> "$CLAUDE_ENV_FILE"
 fi
 
 # MLflow setup (optional - only runs if MLFLOW_PORT is configured)
