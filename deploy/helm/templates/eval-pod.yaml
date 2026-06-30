@@ -1,0 +1,110 @@
+{{- if .Values.evalPod.enabled }}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "rhdp-rca.fullname" . }}-eval
+  labels:
+    {{- include "rhdp-rca.labels" . | nindent 4 }}
+spec:
+  restartPolicy: Never
+  initContainers:
+  - name: setup-ssh
+    image: {{ include "rhdp-rca.image" . }}
+    command: ["bash", "-c"]
+    args:
+    - |
+      mkdir -p /workspace/.ssh /workspace/.claude /workspace/.config/gcloud
+      cp /tmp/ssh-secret/id_ed25519 /workspace/.ssh/id_ed25519
+      chmod 600 /workspace/.ssh/id_ed25519
+      cat > /workspace/.ssh/config <<EOF
+      Host ci-bastion
+        HostName $(cat /tmp/ssh-secret/bastion-hostname)
+        User $(cat /tmp/ssh-secret/bastion-username)
+        Port $(cat /tmp/ssh-secret/bastion-port)
+        IdentityFile /workspace/.ssh/id_ed25519
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+
+      Host ci-jumpbox
+        HostName $(cat /tmp/ssh-secret/jumpbox-hostname)
+        User $(cat /tmp/ssh-secret/jumpbox-username)
+        Port $(cat /tmp/ssh-secret/jumpbox-port)
+        IdentityFile /workspace/.ssh/id_ed25519
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+
+      Host aap2-bastion
+        HostName $(cat /tmp/ssh-secret/db-bastion-hostname)
+        User $(cat /tmp/ssh-secret/db-bastion-username)
+        Port $(cat /tmp/ssh-secret/db-bastion-port)
+        IdentityFile /workspace/.ssh/id_ed25519
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
+      EOF
+      chmod 600 /workspace/.ssh/config
+      cp /tmp/claude-settings/settings.json /workspace/.claude/settings.json
+      cp /tmp/gcp-creds/application_default_credentials.json /workspace/.config/gcloud/application_default_credentials.json
+    volumeMounts:
+    - name: ssh-secret
+      mountPath: /tmp/ssh-secret
+      readOnly: true
+    - name: claude-settings
+      mountPath: /tmp/claude-settings
+      readOnly: true
+    - name: gcp-creds
+      mountPath: /tmp/gcp-creds
+      readOnly: true
+    - name: workspace
+      mountPath: /workspace
+  containers:
+  - name: claude
+    image: {{ include "rhdp-rca.image" . }}
+    command: ["sleep", "infinity"]
+    env:
+    - name: CLAUDE_CODE_USE_VERTEX
+      value: "1"
+    - name: CLOUD_ML_REGION
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.secrets.names.vertexCreds }}
+          key: CLOUD_ML_REGION
+    - name: ANTHROPIC_VERTEX_PROJECT_ID
+      valueFrom:
+        secretKeyRef:
+          name: {{ .Values.secrets.names.vertexCreds }}
+          key: ANTHROPIC_VERTEX_PROJECT_ID
+    - name: GOOGLE_APPLICATION_CREDENTIALS
+      value: /workspace/.config/gcloud/application_default_credentials.json
+    - name: HOME
+      value: /workspace
+    - name: CLAUDE_CODE_ACCEPT_TOS
+      value: "true"
+    resources:
+      requests:
+        cpu: {{ .Values.resources.requests.cpu }}
+        memory: {{ .Values.resources.requests.memory }}
+      limits:
+        cpu: {{ .Values.resources.limits.cpu | quote }}
+        memory: {{ .Values.resources.limits.memory }}
+    volumeMounts:
+    - name: workspace
+      mountPath: /workspace
+  volumes:
+  - name: workspace
+    emptyDir: {}
+  - name: gcp-creds
+    secret:
+      secretName: {{ .Values.secrets.names.vertexCreds }}
+      items:
+      - key: gcp-credentials
+        path: application_default_credentials.json
+  - name: claude-settings
+    secret:
+      secretName: {{ .Values.secrets.names.skillConfig }}
+      items:
+      - key: settings.json
+        path: settings.json
+  - name: ssh-secret
+    secret:
+      secretName: {{ .Values.secrets.names.sshKey }}
+{{- end }}

@@ -51,3 +51,9 @@ settings.json
 reports/
 
 .analysis/
+deploy/values.yaml
+
+settings.json
+reports/
+
+.analysis/

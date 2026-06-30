@@ -1,0 +1,56 @@
+git:
+  uri: https://github.com/redhat-et/rhdp-rca-plugin.git
+  ref: main
+
+image:
+  registry: image-registry.openshift-image-registry.svc:5000
+  name: rhdp-rca-plugin
+  tag: latest
+
+cronjob:
+  schedule: "7,37 * * * *"
+  limit: 15
+  period: 30m
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+pvc:
+  storage: 5Gi
+  storageClassName: gp3
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+secrets:
+  names:
+    vertexCreds: claude-vertex-creds
+    skillConfig: rca-skill-config
+    sshKey: ci-ssh-key
+    webhookSecret: rhdp-rca-plugin-webhook-secret
+  vertex:
+    cloudMlRegion: ""
+    projectId: ""
+    gcpCredentials: ""
+  skillConfig:
+    settingsJson: ""
+  ssh:
+    privateKey: ""
+    bastionHostname: ""
+    bastionUsername: ""
+    bastionPort: ""
+    dbBastionHostname: ""
+    dbBastionUsername: ""
+    dbBastionPort: ""
+    dbRemoteHost: ""
+    dbRemotePort: ""
+    jumpboxHostname: ""
+    jumpboxUsername: ""
+    jumpboxPort: ""
+
+evalPod:
+  enabled: false

@@ -1,24 +1,25 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: batch-rca-analyzer
-  namespace: claude-ci-test
+  name: {{ include "rhdp-rca.fullname" . }}-batch
+  labels:
+    {{- include "rhdp-rca.labels" . | nindent 4 }}
 spec:
-  schedule: "7,37 * * * *"
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
+  schedule: {{ .Values.cronjob.schedule | quote }}
+  successfulJobsHistoryLimit: {{ .Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronjob.failedJobsHistoryLimit }}
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
       template:
         metadata:
           labels:
-            app: batch-rca-analyzer
+            app: {{ include "rhdp-rca.fullname" . }}-batch
         spec:
           restartPolicy: Never
           initContainers:
           - name: setup-ssh
-            image: <YOUR_REGISTRY>/claude-ci-test/claude-rca:latest
+            image: {{ include "rhdp-rca.image" . }}
             command:
             - bash
             - -c
@@ -44,23 +45,27 @@ spec:
                 IdentityFile /workspace/.ssh/id_ed25519
                 StrictHostKeyChecking no
                 UserKnownHostsFile /dev/null
+
+              Host aap2-bastion
+                HostName $(cat /tmp/ssh-secret/db-bastion-hostname)
+                User $(cat /tmp/ssh-secret/db-bastion-username)
+                Port $(cat /tmp/ssh-secret/db-bastion-port)
+                IdentityFile /workspace/.ssh/id_ed25519
+                StrictHostKeyChecking no
+                UserKnownHostsFile /dev/null
               EOF
               chmod 600 /workspace/.ssh/config
               cp /tmp/claude-settings/settings.json /workspace/.claude/settings.json
               cp /tmp/gcp-creds/application_default_credentials.json /workspace/.config/gcloud/application_default_credentials.json
 
-              echo "[INIT] Installing skills to local directory..."
-              mkdir -p /workspace/.claude/skills
-              if [ -d /workspace/.claude/plugins/marketplaces/aiops-marketplace/skills ]; then
-                # Copy skills excluding .analysis (job results), __pycache__, tests, README.md
-                rsync -a --exclude='.analysis' --exclude='__pycache__' --exclude='*.pyc' --exclude='tests' --exclude='README.md' \
-                  /workspace/.claude/plugins/marketplaces/aiops-marketplace/skills/ \
-                  /workspace/.claude/skills/
-                echo "[INIT] Skills installed: $(ls /workspace/.claude/skills/ | tr '\n' ' ')"
-                echo "[INIT] Skills size: $(du -sh /workspace/.claude/skills 2>/dev/null || echo 'unknown')"
-              else
-                echo "[INIT] WARNING: No marketplace skills found at /workspace/.claude/plugins/marketplaces/aiops-marketplace/skills"
-              fi
+              echo "[INIT] Copying skills and scripts from image..."
+              mkdir -p /workspace/.claude/skills /workspace/.claude/plugins/cache
+              rsync -a --exclude='.analysis' --exclude='__pycache__' --exclude='*.pyc' --exclude='tests' --exclude='README.md' \
+                /opt/app/skills/ /workspace/.claude/skills/
+              cp -r /opt/app/plugins-cache/* /workspace/.claude/plugins/cache/
+              cp /opt/app/batch/batch_rca_headless.sh /workspace/batch_rca_headless.sh
+              chmod +x /workspace/batch_rca_headless.sh
+              echo "[INIT] Skills installed: $(ls /workspace/.claude/skills/ | tr '\n' ' ')"
             volumeMounts:
             - name: workspace
               mountPath: /workspace
@@ -75,25 +80,30 @@ spec:
               readOnly: true
           containers:
           - name: batch-rca
-            image: <YOUR_REGISTRY>/claude-ci-test/claude-rca:latest
+            image: {{ include "rhdp-rca.image" . }}
             command:
             - /bin/bash
             - -c
             - |
               cd /workspace
-              ./batch_rca_headless.sh --limit 15 --period 30m
+              echo "[INFO] Starting SSH tunnel to database..."
+              DB_REMOTE_HOST=$(cat /tmp/ssh-secret/db-remote-host)
+              DB_REMOTE_PORT=$(cat /tmp/ssh-secret/db-remote-port)
+              ssh -f -N -L 15432:${DB_REMOTE_HOST}:${DB_REMOTE_PORT} aap2-bastion
+              echo "[INFO] SSH tunnel established on localhost:15432"
+              ./batch_rca_headless.sh --limit {{ .Values.cronjob.limit }} --period {{ .Values.cronjob.period }}
             env:
             - name: CLAUDE_CODE_USE_VERTEX
               value: "1"
             - name: CLOUD_ML_REGION
               valueFrom:
                 secretKeyRef:
-                  name: claude-vertex-creds
+                  name: {{ .Values.secrets.names.vertexCreds }}
                   key: CLOUD_ML_REGION
             - name: ANTHROPIC_VERTEX_PROJECT_ID
               valueFrom:
                 secretKeyRef:
-                  name: claude-vertex-creds
+                  name: {{ .Values.secrets.names.vertexCreds }}
                   key: ANTHROPIC_VERTEX_PROJECT_ID
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: /workspace/.config/gcloud/application_default_credentials.json
@@ -103,30 +113,33 @@ spec:
               value: "true"
             resources:
               requests:
-                cpu: 500m
-                memory: 512Mi
+                cpu: {{ .Values.resources.requests.cpu }}
+                memory: {{ .Values.resources.requests.memory }}
               limits:
-                cpu: "2"
-                memory: 2Gi
+                cpu: {{ .Values.resources.limits.cpu | quote }}
+                memory: {{ .Values.resources.limits.memory }}
             volumeMounts:
             - name: workspace
               mountPath: /workspace
+            - name: ssh-secret
+              mountPath: /tmp/ssh-secret
+              readOnly: true
           volumes:
           - name: workspace
             persistentVolumeClaim:
-              claimName: batch-rca-pvc
+              claimName: {{ include "rhdp-rca.fullname" . }}-pvc
           - name: gcp-creds
             secret:
-              secretName: claude-vertex-creds
+              secretName: {{ .Values.secrets.names.vertexCreds }}
               items:
               - key: gcp-credentials
                 path: application_default_credentials.json
           - name: claude-settings
             secret:
-              secretName: rca-skill-config
+              secretName: {{ .Values.secrets.names.skillConfig }}
               items:
               - key: settings.json
                 path: settings.json
           - name: ssh-secret
             secret:
-              secretName: ci-ssh-key
+              secretName: {{ .Values.secrets.names.sshKey }}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: rhdp-rca-plugin
+description: RHDP RCA Plugin - OpenShift deployment for batch root cause analysis
+version: 0.1.0
+appVersion: latest
+type: application

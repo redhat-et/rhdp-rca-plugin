@@ -1,0 +1,26 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: {{ .Values.image.name }}
+  labels:
+    {{- include "rhdp-rca.labels" . | nindent 4 }}
+spec:
+  source:
+    type: Git
+    git:
+      uri: {{ .Values.git.uri }}
+      ref: {{ .Values.git.ref }}
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: deploy/Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: {{ .Values.image.name }}:{{ .Values.image.tag }}
+  triggers:
+    - type: ConfigChange
+    - type: GitHub
+      github:
+        secretReference:
+          name: {{ .Values.secrets.names.webhookSecret }}
