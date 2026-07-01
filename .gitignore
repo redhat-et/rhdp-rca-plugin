@@ -57,3 +57,4 @@ settings.json
 reports/
 
 .analysis/
+deploy/helm/values.yaml
