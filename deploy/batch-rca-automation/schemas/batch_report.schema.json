@@ -1,0 +1,376 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "batch_report.schema.json",
+  "title": "Batch RCA Report",
+  "description": "Aggregated batch report produced by batch_rca_headless.sh after parallel root-cause-analysis runs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "batch_id",
+    "generated_at",
+    "total_jobs_requested",
+    "total_jobs_analyzed",
+    "total_jobs_failed",
+    "timing",
+    "root_cause_category_breakdown",
+    "confidence_breakdown",
+    "high_priority_recommendations",
+    "job_summaries",
+    "failed_analyses",
+    "cross_job_patterns"
+  ],
+  "properties": {
+    "batch_id": {
+      "type": "string",
+      "pattern": "^batch_[0-9]{8}_[0-9]{6}$",
+      "description": "Batch identifier matching the report filename stem (e.g. batch_20260611_125625)"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp when aggregation finished"
+    },
+    "total_jobs_requested": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of job IDs submitted to this batch run"
+    },
+    "total_jobs_analyzed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of jobs that completed RCA successfully"
+    },
+    "total_jobs_failed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of jobs whose RCA agent failed or produced no step5 summary"
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_spawn",
+        "agent_completion",
+        "wall_clock_total_ms",
+        "aggregation_completed_at"
+      ],
+      "properties": {
+        "agent_spawn": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp when parallel agents were launched"
+        },
+        "agent_completion": {
+          "type": "object",
+          "description": "Per-job agent timing keyed by job ID",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["duration_ms", "status"],
+            "properties": {
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "status": {
+                "type": "string",
+                "enum": ["completed", "failed", "timeout"]
+              }
+            }
+          }
+        },
+        "wall_clock_total_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Elapsed milliseconds from agent_spawn until the last agent finished"
+        },
+        "aggregation_completed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp when the batch report was written"
+        }
+      }
+    },
+    "root_cause_category_breakdown": {
+      "type": "object",
+      "description": "Counts and job lists grouped by root cause category; empty object when total_jobs_analyzed is 0",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["count", "job_ids", "description"],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "job_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Brief pattern description for this category in this batch"
+          }
+        }
+      },
+      "propertyNames": {
+        "enum": [
+          "application_bug",
+          "infrastructure",
+          "configuration",
+          "dependency",
+          "network",
+          "resource",
+          "cloud_api",
+          "secrets",
+          "unknown"
+        ]
+      }
+    },
+    "confidence_breakdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["high", "medium", "low"],
+      "properties": {
+        "high": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "medium": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "low": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "high_priority_recommendations": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rank",
+          "priority",
+          "action",
+          "affects_jobs",
+          "category",
+          "details"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "priority": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "affects_jobs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "application_bug",
+              "infrastructure",
+              "configuration",
+              "dependency",
+              "network",
+              "resource",
+              "cloud_api",
+              "secrets",
+              "unknown"
+            ]
+          },
+          "details": {
+            "type": "string",
+            "minLength": 1
+          },
+          "github_path": {
+            "type": "string",
+            "description": "Optional GitHub path in owner/repo:path/to/file.yml:line format"
+          }
+        }
+      }
+    },
+    "job_summaries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "job_id",
+              "status",
+              "root_cause_category",
+              "confidence",
+              "root_cause_summary",
+              "catalog_item",
+              "job_duration_seconds",
+              "analysis_duration_ms",
+              "analysis_path"
+            ],
+            "properties": {
+              "job_id": {"type": "string"},
+              "status": {"const": "analyzed"},
+              "root_cause_category": {
+                "type": "string",
+                "enum": [
+                  "application_bug",
+                  "infrastructure",
+                  "configuration",
+                  "dependency",
+                  "network",
+                  "resource",
+                  "cloud_api",
+                  "secrets",
+                  "unknown"
+                ]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"]
+              },
+              "root_cause_summary": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Root cause narrative from step5 root_cause.summary"
+              },
+              "catalog_item": {"type": "string"},
+              "platform": {"type": "string"},
+              "job_duration_seconds": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "analysis_duration_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failing_role": {"type": "string"},
+              "failing_github_path": {"type": "string"},
+              "analysis_path": {
+                "type": "string",
+                "pattern": "^\\.analysis/[0-9]+/step5_analysis_summary\\.json$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "job_id",
+              "status",
+              "root_cause_summary",
+              "analysis_duration_ms",
+              "analysis_path"
+            ],
+            "properties": {
+              "job_id": {"type": "string"},
+              "status": {"const": "failed"},
+              "root_cause_summary": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Why RCA failed for this job"
+              },
+              "analysis_duration_ms": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "analysis_path": {
+                "type": "string",
+                "pattern": "^\\.analysis/[0-9]+/step5_analysis_summary\\.json$"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "failed_analyses": {
+      "type": "array",
+      "description": "Jobs whose RCA agent failed; empty array when total_jobs_failed is 0",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["job_id", "error"],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string",
+            "minLength": 1
+          },
+          "stage": {
+            "type": "string",
+            "enum": ["agent_spawn", "skill_execution", "step5_missing", "upload"]
+          }
+        }
+      }
+    },
+    "cross_job_patterns": {
+      "type": "array",
+      "description": "Shared failure patterns across jobs in this batch and/or historical batches; empty array if none",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pattern", "jobs", "description", "source"],
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "enum": ["current_batch", "historical"],
+            "description": "Whether this pattern was found within the current batch or against historical results"
+          },
+          "jobs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            },
+            "description": "Job IDs from the current batch involved in this pattern"
+          },
+          "historical_result_id": {
+            "type": "integer",
+            "description": "ID from aap2_job_results that this pattern matches (only when source is historical)"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "recurrence_count": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Total historical occurrences of this pattern (only when source is historical)"
+          },
+          "shared_github_path": {
+            "type": "string",
+            "description": "Common code path in owner/repo:path/to/file.yml:line format when applicable"
+          }
+        }
+      }
+    }
+  }
+}
