@@ -16,7 +16,7 @@ cronjob:
 
 pvc:
   storage: 5Gi
-  storageClassName: gp3
+  storageClassName: ""
 
 resources:
   requests:
