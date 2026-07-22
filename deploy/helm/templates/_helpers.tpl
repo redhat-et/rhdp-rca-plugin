@@ -10,5 +10,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{- define "rhdp-rca.image" -}}
+{{- if .Values.image.digest -}}
+{{ .Values.image.registry }}/{{ .Release.Namespace }}/{{ .Values.image.name }}@{{ .Values.image.digest }}
+{{- else -}}
 {{ .Values.image.registry }}/{{ .Release.Namespace }}/{{ .Values.image.name }}:{{ .Values.image.tag }}
+{{- end -}}
 {{- end -}}
