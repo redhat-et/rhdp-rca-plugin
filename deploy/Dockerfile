@@ -16,6 +16,7 @@ WORKDIR /opt/app
 
 COPY skills/ /opt/app/skills/
 COPY deploy/batch-rca-automation/ /opt/app/batch/
+RUN pip install --no-cache-dir --break-system-packages -r /opt/app/batch/requirements.txt
 COPY .claude-plugin/ /opt/app/plugins-cache/
 
 WORKDIR /workspace
