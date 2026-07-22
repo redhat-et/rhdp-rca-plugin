@@ -15,7 +15,7 @@ RUN npm install -g @anthropic-ai/claude-code
 WORKDIR /opt/app
 
 COPY skills/ /opt/app/skills/
-COPY deploy/batch-rca-automation/batch_rca_headless.sh /opt/app/batch/batch_rca_headless.sh
+COPY deploy/batch-rca-automation/ /opt/app/batch/
 COPY .claude-plugin/ /opt/app/plugins-cache/
 
 WORKDIR /workspace
