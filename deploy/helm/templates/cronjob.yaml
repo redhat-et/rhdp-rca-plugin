@@ -63,8 +63,9 @@ spec:
               rsync -a --exclude='.analysis' --exclude='__pycache__' --exclude='*.pyc' --exclude='tests' --exclude='README.md' \
                 /opt/app/skills/ /workspace/.claude/skills/
               cp -r /opt/app/plugins-cache/* /workspace/.claude/plugins/cache/
-              cp -r /opt/app/batch/ /workspace/batch/
+              cp -r /opt/app/batch /workspace/batch
               chmod +x /workspace/batch/batch_rca_headless.sh
+              ln -sf /workspace/.claude /workspace/batch/.claude
               echo "[INIT] Skills installed: $(ls /workspace/.claude/skills/ | tr '\n' ' ')"
             volumeMounts:
             - name: workspace
