@@ -41,6 +41,7 @@ Review the JSON output. Some settings are required, others are optional:
 - **SSH / REMOTE_HOST** not configured: `--fetch` flag won't work (user must provide logs in JOB_LOGS_DIR manually)
 - **Splunk** not configured: Steps 2-3 (log correlation) will be skipped
 - **GitHub token** not configured: Step 4 (config fetching) will be skipped
+- **pgvector** not configured: Completed RCAs won't be embedded for historical similarity search (set `PGVECTOR_HOST`, `PGVECTOR_DB_NAME`, `PGVECTOR_DB_USER`, `PGVECTOR_DB_PASSWORD`; optional `PGVECTOR_TABLE`, defaults to `rca_analysis_embeddings`)
 
 #### Interactive Setup for Missing Configs
 
@@ -161,9 +162,15 @@ python3 -m venv .venv
 
 **Output**: `.analysis/<job-id>/step5_analysis_summary.json` 
 
-**Post-Step 5 Action**: After saving the summary, you MUST run the upload command to send the analysis to the Jumpbox:
+**Post-Step 5 Actions**: After saving the summary, you MUST run these commands:
+
 ```bash
+# Upload analysis to the Jumpbox
 python scripts/cli.py upload --job-id <job-id>
+
+# Embed the completed RCA into pgvector for historical similarity search
+# (best-effort: skips cleanly when PGVECTOR_* is not configured)
+python scripts/cli.py embed --job-id <job-id>
 ```
 
 ### Analysis Guidelines

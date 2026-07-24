@@ -61,6 +61,11 @@ Update the values:
 - `SPLUNK_INDEX` - Default index for AAP logs
 - `SPLUNK_OCP_APP_INDEX` / `SPLUNK_OCP_INFRA_INDEX` - OCP log indices
 
+Optional pgvector settings (for embedding completed RCAs):
+- `PGVECTOR_HOST` / `PGVECTOR_PORT` - pgvector database host/port
+- `PGVECTOR_DB_NAME` / `PGVECTOR_DB_USER` / `PGVECTOR_DB_PASSWORD` - credentials (fall back to `SOURCE_DB_*` if unset)
+- `PGVECTOR_TABLE` - table name (default: `rca_analysis_embeddings`)
+
 ### 3. Configure SSH for auto-fetch (optional)
 
 To use the `--fetch` flag for automatic log retrieval, set up SSH access to the remote log server:
@@ -244,9 +249,27 @@ All steps are executed automatically by the `cli.py analyze` command:
 
 **Output**: `step5_analysis_summary.json` (or present directly to user)
 
-**Post-Step 5 Action**: After saving the summary, run the upload command to send the analysis to the Jumpbox:
+**Post-Step 5 Actions**: After saving the summary, run:
+
 ```bash
+# Upload analysis to the Jumpbox
 python scripts/cli.py upload --job-id <job-id>
+
+# Embed into pgvector for historical similarity search (skipped if not configured)
+python scripts/cli.py embed --job-id <job-id>
+```
+
+Query similar past RCAs (requires pgvector):
+
+```bash
+# From a completed job's analysis artifacts
+python scripts/cli.py similar --job-id <job-id> --limit 5
+
+# Free-text query
+python scripts/cli.py similar --text "missing aws_access_key_id in account.yaml" --limit 5
+
+# Optionally filter by category / catalog item derived from the job
+python scripts/cli.py similar --job-id <job-id> --filter
 ```
 
 ## Output
