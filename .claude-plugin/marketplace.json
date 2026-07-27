@@ -19,7 +19,8 @@
         "./skills/context-fetcher",
         "./skills/logs-fetcher",
         "./skills/feedback-capture",
-        "./skills/rca-annotator"
+        "./skills/rca-annotator",
+        "./skills/rca-knowledge-base"
       ]
     }
   ]
