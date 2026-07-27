@@ -34,7 +34,7 @@ RCA analyses must have been previously embedded using the root-cause-analysis sk
 Ensure the root-cause-analysis virtual environment exists:
 
 ```bash
-cd skills/root-cause-analysis && (test -d .venv || (python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt))
+cd ../root-cause-analysis && (test -d .venv || (python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt))
 ```
 
 If the venv creation or dependency install fails, stop and report the error to the user.
@@ -64,7 +64,7 @@ Rephrase the user's natural language question into failure-domain terms that ali
 ### Step 3: Run the similarity search [Bash]
 
 ```bash
-cd skills/root-cause-analysis && .venv/bin/python scripts/cli.py similar --text "<formulated_query>" --limit 5
+cd ../root-cause-analysis && .venv/bin/python scripts/cli.py similar --text "<formulated_query>" --limit 5
 ```
 
 Adjust `--limit` up to 10 if the user asks for more results. Add `--category` or `--catalog-item` flags if determined in Step 2.
