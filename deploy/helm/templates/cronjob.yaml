@@ -63,9 +63,8 @@ spec:
               rsync -a --exclude='.analysis' --exclude='__pycache__' --exclude='*.pyc' --exclude='tests' --exclude='README.md' \
                 /opt/app/skills/ /workspace/.claude/skills/
               cp -r /opt/app/plugins-cache/* /workspace/.claude/plugins/cache/
-              cp -r /opt/app/batch /workspace/batch
-              chmod +x /workspace/batch/batch_rca_headless.sh
-              ln -sf /workspace/.claude /workspace/batch/.claude
+              cp -r /opt/app/batch/* /workspace/
+              chmod +x /workspace/batch_rca_headless.sh
               echo "[INIT] Skills installed: $(ls /workspace/.claude/skills/ | tr '\n' ' ')"
             volumeMounts:
             - name: workspace
@@ -93,7 +92,7 @@ spec:
               ssh -f -N -L 15432:${DB_REMOTE_HOST}:${DB_REMOTE_PORT} aap2-bastion
               echo "[INFO] SSH tunnel established on localhost:15432"
               SINCE=$(date -u -d "{{ .Values.cronjob.since }} ago" "+%Y-%m-%d %H:%M:%S")
-              ./batch/batch_rca_headless.sh --limit {{ .Values.cronjob.limit }} --since "$SINCE"
+              ./batch_rca_headless.sh --limit {{ .Values.cronjob.limit }} --since "$SINCE"
             env:
             - name: CLAUDE_CODE_USE_VERTEX
               value: "1"
