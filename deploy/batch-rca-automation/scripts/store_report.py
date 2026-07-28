@@ -46,10 +46,9 @@ def _validate_match_id(cur: Any, results_table: str, matched_id: int, job: dict[
     cur.execute(
         psycopg2.sql.SQL(
             """SELECT 1 FROM {}
-               WHERE id = %s AND root_cause_category = %s
-                 AND catalog_item = %s AND confidence = 'high'"""
+               WHERE id = %s AND root_cause_category = %s AND confidence = 'high'"""
         ).format(psycopg2.sql.Identifier(results_table)),
-        (matched_id, job.get("root_cause_category"), job.get("catalog_item")),
+        (matched_id, job.get("root_cause_category")),
     )
     return cur.fetchone() is not None
 
@@ -163,6 +162,46 @@ def store_pre_matched(conn: Any, config: dict[str, Any], pre_matched: list[dict[
     return count
 
 
+def link_intra_batch_dupes(
+    conn: Any, config: dict[str, Any], intra_batch_dupes: list[dict[str, Any]]
+) -> int:
+    """Copy aap2_job_results_fk_id from representative to each duplicate in the same batch."""
+    source_table = config["source_table"]
+    count = 0
+    with conn.cursor() as cur:
+        for entry in intra_batch_dupes:
+            dupe_id = str(entry["job_id"])
+            rep_id = str(entry["representative_job_id"])
+
+            cur.execute(
+                psycopg2.sql.SQL("SELECT aap2_job_results_fk_id FROM {} WHERE job_id = %s").format(
+                    psycopg2.sql.Identifier(source_table)
+                ),
+                (rep_id,),
+            )
+            row = cur.fetchone()
+            if not row or row[0] is None:
+                print(
+                    f"[WARN] intra-batch dupe {dupe_id}: representative {rep_id} has no FK yet",
+                    file=sys.stderr,
+                )
+                continue
+
+            fk_id = row[0]
+            cur.execute(
+                psycopg2.sql.SQL(
+                    """UPDATE {} SET aap2_job_results_fk_id = %s, ai_processed = TRUE
+                       WHERE job_id = %s"""
+                ).format(psycopg2.sql.Identifier(source_table)),
+                (fk_id, dupe_id),
+            )
+            print(f"[DUPE-LINK] job {dupe_id} -> result {fk_id} (via representative {rep_id})")
+            count += 1
+
+    conn.commit()
+    return count
+
+
 def store_cross_patterns(conn: Any, config: dict[str, Any], report: dict[str, Any]) -> None:
     patterns = report.get("cross_job_patterns", [])
     if not patterns:
@@ -194,10 +233,17 @@ def main(argv: list[str] | None = None) -> int:
         metavar="JSON",
         help="JSON array of pre-matched jobs from pre_filter_jobs.py (stdin if '-')",
     )
+    parser.add_argument(
+        "--link-dupes",
+        metavar="JSON",
+        help="JSON array of intra-batch dupes [{job_id, representative_job_id}] to link",
+    )
     args = parser.parse_args(argv)
 
-    if not args.report and not args.backfill and not args.pre_matched:
-        parser.error("Provide a report path, --backfill DIR, or --pre-matched JSON")
+    if not args.report and not args.backfill and not args.pre_matched and not args.link_dupes:
+        parser.error(
+            "Provide a report path, --backfill DIR, --pre-matched JSON, or --link-dupes JSON"
+        )
 
     try:
         config = load_config(required=("name", "user", "password", "results_table", "source_table"))
@@ -222,6 +268,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[DONE] {count} pre-matched job(s) stored")
         except (json.JSONDecodeError, KeyError) as e:
             print(f"[ERROR] Invalid pre-matched JSON: {e}", file=sys.stderr)
+            return 1
+        finally:
+            conn.close()
+        return 0
+
+    if args.link_dupes:
+        try:
+            dupes = json.loads(args.link_dupes)
+            count = link_intra_batch_dupes(conn, config, dupes)
+            print(f"[DONE] {count} intra-batch dupe(s) linked")
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"[ERROR] Invalid link-dupes JSON: {e}", file=sys.stderr)
             return 1
         finally:
             conn.close()
