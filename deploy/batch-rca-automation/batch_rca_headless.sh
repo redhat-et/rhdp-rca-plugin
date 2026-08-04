@@ -270,9 +270,12 @@ mkdir -p "$REPORT_DIR"
 cd "$SCRIPT_DIR" || exit 1
 
 CLAUDE_STDERR_FILE=$(mktemp)
+CLAUDE_MODEL="${CLAUDE_MODEL:-claude-sonnet-4-6}"
+echo "[INFO] Using model: $CLAUDE_MODEL"
+
 claude -p \
   --allowedTools "Agent,Bash,Read,Write,Skill,mcp__github__search_code,mcp__github__get_file_contents" \
-  --model claude-sonnet-4-6 \
+  --model "$CLAUDE_MODEL" \
   "$CLAUDE_PROMPT" 2>"$CLAUDE_STDERR_FILE" || {
   echo "[ERROR] Claude execution failed"
   echo "[DEBUG] stderr: $(cat "$CLAUDE_STDERR_FILE")"

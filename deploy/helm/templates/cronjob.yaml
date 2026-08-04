@@ -26,7 +26,7 @@ spec:
             args:
             - |
               echo "[INIT] Setting up SSH and configs..."
-              mkdir -p /workspace/.ssh /workspace/.claude /workspace/.config/gcloud
+              mkdir -p /workspace/.ssh /workspace/.claude
               cp /tmp/ssh-secret/id_ed25519 /workspace/.ssh/id_ed25519
               chmod 600 /workspace/.ssh/id_ed25519
               cat > /workspace/.ssh/config <<EOF
@@ -56,7 +56,10 @@ spec:
               EOF
               chmod 600 /workspace/.ssh/config
               cp /tmp/claude-settings/settings.json /workspace/.claude/settings.json
+              {{- if ne .Values.claude.backend "litellm" }}
+              mkdir -p /workspace/.config/gcloud
               cp /tmp/gcp-creds/application_default_credentials.json /workspace/.config/gcloud/application_default_credentials.json
+              {{- end }}
 
               echo "[INIT] Copying skills and scripts from image..."
               mkdir -p /workspace/.claude/skills /workspace/.claude/plugins/cache
@@ -75,9 +78,11 @@ spec:
             - name: claude-settings
               mountPath: /tmp/claude-settings
               readOnly: true
+            {{- if ne .Values.claude.backend "litellm" }}
             - name: gcp-creds
               mountPath: /tmp/gcp-creds
               readOnly: true
+            {{- end }}
           containers:
           - name: batch-rca
             image: {{ include "rhdp-rca.image" . }}
@@ -94,6 +99,18 @@ spec:
               SINCE=$(date -u -d "{{ .Values.cronjob.since }} ago" "+%Y-%m-%d %H:%M:%S")
               ./batch_rca_headless.sh --limit {{ .Values.cronjob.limit }} --since "$SINCE"
             env:
+            {{- if eq .Values.claude.backend "litellm" }}
+            - name: ANTHROPIC_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.names.litellmCreds }}
+                  key: ANTHROPIC_BASE_URL
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.names.litellmCreds }}
+                  key: ANTHROPIC_API_KEY
+            {{- else }}
             - name: CLAUDE_CODE_USE_VERTEX
               value: "1"
             - name: CLOUD_ML_REGION
@@ -108,6 +125,9 @@ spec:
                   key: ANTHROPIC_VERTEX_PROJECT_ID
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: /workspace/.config/gcloud/application_default_credentials.json
+            {{- end }}
+            - name: CLAUDE_MODEL
+              value: {{ .Values.claude.model | quote }}
             - name: HOME
               value: /workspace
             - name: CLAUDE_CODE_ACCEPT_TOS
@@ -129,12 +149,14 @@ spec:
           - name: workspace
             persistentVolumeClaim:
               claimName: {{ include "rhdp-rca.fullname" . }}-pvc
+          {{- if ne .Values.claude.backend "litellm" }}
           - name: gcp-creds
             secret:
               secretName: {{ .Values.secrets.names.vertexCreds }}
               items:
               - key: gcp-credentials
                 path: application_default_credentials.json
+          {{- end }}
           - name: claude-settings
             secret:
               secretName: {{ .Values.secrets.names.skillConfig }}
