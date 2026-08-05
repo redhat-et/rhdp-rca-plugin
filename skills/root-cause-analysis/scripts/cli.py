@@ -72,6 +72,160 @@ def cmd_upload(args: argparse.Namespace, config: Config, span=None) -> int:
     return 0 if success else 1
 
 
+@trace(name="Embed RCA analysis", span_type=SpanType.CHAIN if SpanType else None)
+def cmd_embed(args: argparse.Namespace, config: Config, span=None) -> int:
+    """Embed completed RCA (step1/4/5) into pgvector for historical similarity search."""
+    if __package__ is None:
+        from scripts import vector
+    else:
+        from . import vector
+
+    job_id = args.job_id
+    analysis_dir = config.analysis_dir / job_id
+
+    if not config.has_pgvector():
+        print(
+            "Skipping embed: pgvector not configured "
+            "(set PGVECTOR_HOST / PGVECTOR_DB_NAME / PGVECTOR_DB_USER / PGVECTOR_DB_PASSWORD)"
+        )
+        if span:
+            span.set_outputs({"job_id": job_id, "skipped": True, "reason": "pgvector_not_configured"})
+        return 0
+
+    step1 = load_step(analysis_dir, 1)
+    if not step1:
+        error_message = f"Missing step1_job_context.json for job {job_id}"
+        print(f"Error: {error_message}")
+        if span:
+            span.set_outputs({"error": error_message})
+        return 1
+
+    step5 = load_step(analysis_dir, 5)
+    if not step5:
+        error_message = (
+            f"Missing step5_analysis_summary.json for job {job_id}. "
+            "Complete Step 5 analysis before embedding."
+        )
+        print(f"Error: {error_message}")
+        if span:
+            span.set_outputs({"error": error_message})
+        return 1
+
+    step4 = load_step(analysis_dir, 4)  # optional
+
+    # Ensure table name from config is visible to vector helpers
+    if config.pgvector_table:
+        os.environ.setdefault("PGVECTOR_TABLE", config.pgvector_table)
+    if config.pgvector_host:
+        os.environ.setdefault("PGVECTOR_HOST", config.pgvector_host)
+    if config.pgvector_port:
+        os.environ.setdefault("PGVECTOR_PORT", str(config.pgvector_port))
+    if config.pgvector_db_name:
+        os.environ.setdefault("PGVECTOR_DB_NAME", config.pgvector_db_name)
+    if config.pgvector_db_user:
+        os.environ.setdefault("PGVECTOR_DB_USER", config.pgvector_db_user)
+    if config.pgvector_db_password:
+        os.environ.setdefault("PGVECTOR_DB_PASSWORD", config.pgvector_db_password)
+
+    try:
+        vector.setup_pgvector_table(config.pgvector_table)
+        metadata = vector.build_rca_metadata(step1, step4, step5)
+        row_id = vector.upsert_rca_embedding(metadata, table=config.pgvector_table)
+    except Exception as e:
+        error_message = f"Failed to embed RCA for job {job_id}: {e}"
+        print(f"Error: {error_message}")
+        if span:
+            span.set_outputs({"error": error_message})
+        return 1
+
+    print(f"Embedded job {job_id} as row id={row_id}")
+    if span:
+        span.set_outputs(
+            {
+                "job_id": job_id,
+                "row_id": row_id,
+                "root_cause_category": metadata.get("root_cause_category"),
+                "catalog_item": metadata.get("catalog_item"),
+            }
+        )
+    return 0
+
+
+@trace(name="Query similar RCAs", span_type=SpanType.RETRIEVER if SpanType else None)
+def cmd_similar(args: argparse.Namespace, config: Config, span=None) -> int:
+    """Query pgvector for RCAs similar to a job or free-text query."""
+    if __package__ is None:
+        from scripts import vector
+    else:
+        from . import vector
+
+    if not config.has_pgvector():
+        print(
+            "Error: pgvector not configured "
+            "(set PGVECTOR_HOST / PGVECTOR_DB_NAME / PGVECTOR_DB_USER / PGVECTOR_DB_PASSWORD)"
+        )
+        return 1
+
+    if config.pgvector_table:
+        os.environ.setdefault("PGVECTOR_TABLE", config.pgvector_table)
+    if config.pgvector_host:
+        os.environ.setdefault("PGVECTOR_HOST", config.pgvector_host)
+    if config.pgvector_port:
+        os.environ.setdefault("PGVECTOR_PORT", str(config.pgvector_port))
+    if config.pgvector_db_name:
+        os.environ.setdefault("PGVECTOR_DB_NAME", config.pgvector_db_name)
+    if config.pgvector_db_user:
+        os.environ.setdefault("PGVECTOR_DB_USER", config.pgvector_db_user)
+    if config.pgvector_db_password:
+        os.environ.setdefault("PGVECTOR_DB_PASSWORD", config.pgvector_db_password)
+
+    query_text = args.text
+    category = args.category
+    catalog_item = args.catalog_item
+
+    if args.job_id and not query_text:
+        analysis_dir = config.analysis_dir / args.job_id
+        step1 = load_step(analysis_dir, 1)
+        step4 = load_step(analysis_dir, 4)
+        step5 = load_step(analysis_dir, 5)
+        if not step1 or not step5:
+            error_message = (
+                f"Need step1 and step5 for job {args.job_id} to build a similarity query"
+            )
+            print(f"Error: {error_message}")
+            if span:
+                span.set_outputs({"error": error_message})
+            return 1
+        metadata = vector.build_rca_metadata(step1, step4, step5)
+        query_text = vector.build_embedding_text(metadata)
+        if args.filter:
+            if not category:
+                category = metadata.get("root_cause_category") or None
+            if not catalog_item:
+                catalog_item = metadata.get("catalog_item") or None
+
+    if not query_text:
+        print("Error: provide --text or --job-id")
+        return 1
+
+    try:
+        results = vector.query_similar(
+            query_text,
+            limit=args.limit,
+            category=category,
+            catalog_item=catalog_item,
+            table=config.pgvector_table,
+        )
+    except Exception as e:
+        print(f"Error: similarity query failed: {e}")
+        return 1
+
+    print(json.dumps(results, indent=2, default=str))
+    if span:
+        span.set_outputs({"count": len(results), "job_id": getattr(args, "job_id", None)})
+    return 0
+
+
 def get_step_name(step: int) -> str:
     """Get descriptive name for step."""
     names = {
@@ -91,6 +245,12 @@ def load_step(analysis_dir: Path, step: int) -> dict | None:
     if path.exists():
         with open(path) as f:
             return json.load(f)
+    # Step 5 is written by Claude as step5_analysis_summary.json per SKILL.md
+    if step == 5:
+        alt = analysis_dir / "step5_analysis_summary.json"
+        if alt.exists():
+            with open(alt) as f:
+                return json.load(f)
     return None
 
 
@@ -527,6 +687,29 @@ def main() -> int:
     upload_parser = subparsers.add_parser("upload", help="Upload analysis to Jumpbox")
     upload_parser.add_argument("--job-id", required=True, help="Job ID to upload")
 
+    # embed command
+    embed_parser = subparsers.add_parser(
+        "embed", help="Embed completed RCA into pgvector for historical search"
+    )
+    embed_parser.add_argument("--job-id", required=True, help="Job ID whose step5 to embed")
+
+    # similar command
+    similar_parser = subparsers.add_parser(
+        "similar", help="Query pgvector for similar historical RCAs"
+    )
+    similar_parser.add_argument("--job-id", help="Build query from this job's analysis artifacts")
+    similar_parser.add_argument("--text", help="Free-text similarity query")
+    similar_parser.add_argument(
+        "--limit", type=int, default=5, help="Max results to return (default: 5)"
+    )
+    similar_parser.add_argument(
+        "--filter",
+        action="store_true",
+        help="Also filter by category/catalog_item derived from --job-id (or pass explicitly)",
+    )
+    similar_parser.add_argument("--category", help="Filter by root_cause_category")
+    similar_parser.add_argument("--catalog-item", help="Filter by catalog_item")
+
     args = parser.parse_args()
 
     # Load config
@@ -559,6 +742,8 @@ def main() -> int:
         "setup": cmd_setup,
         "status": cmd_status,
         "upload": cmd_upload,
+        "embed": cmd_embed,
+        "similar": cmd_similar,
     }
 
     exit_code = commands[args.command](args, config, span)

@@ -26,6 +26,12 @@
     "SOURCE_DB_TABLE": "<source-db-table>",
     "SOURCE_DB_BASTION_TABLE": "<source-db-bastion-table>",
     "SOURCE_DB_RESULT_TABLE": "<db-results-table>",
+    "PGVECTOR_HOST": "<pgvector-host>",
+    "PGVECTOR_PORT": "<pgvector-port>",
+    "PGVECTOR_DB_NAME": "<pgvector-db-name>",
+    "PGVECTOR_DB_USER": "<pgvector-db-user>",
+    "PGVECTOR_DB_PASSWORD": "<pgvector-db-password>",
+    "PGVECTOR_TABLE": "rca_analysis_embeddings",
     "SSH_JUMPBOX_ALIAS": "<ssh-jumpbox-alias>",
     "BASTION_SSH_USER": "<bastion-ssh-user>"
   },

@@ -1,10 +1,48 @@
 """Configuration management for splunk-log-analysis."""
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+def load_settings_env(repo_root: Path) -> dict[str, str]:
+    """Load env vars from .claude/settings.json into os.environ.
+
+    Reads the ``"env"`` object from ``repo_root/.claude/settings.json``
+    (or ``settings.local.json``, checked first).  Each key/value pair is
+    injected into ``os.environ`` only if the key is not already set, so
+    real environment variables always take precedence.
+
+    Returns the dict of env vars that were actually applied.
+    """
+    applied: dict[str, str] = {}
+
+    # Load settings.json first, then settings.local.json on top (local overrides).
+    # os.environ.setdefault ensures real env vars always win over both files,
+    # and processing local second ensures its values override base ones.
+    merged: dict[str, str] = {}
+    for name in ("settings.json", "settings.local.json"):
+        settings_path = repo_root / ".claude" / name
+        if not settings_path.is_file():
+            continue
+        try:
+            with open(settings_path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        env_block = data.get("env")
+        if isinstance(env_block, dict):
+            merged.update({k: str(v) for k, v in env_block.items()})
+
+    for key, value in merged.items():
+        if key not in os.environ:
+            os.environ[key] = value
+            applied[key] = value
+
+    return applied
 
 
 def _none_if_empty(value: str | None) -> str | None:
@@ -57,12 +95,24 @@ class Config:
     # SSH configuration
     ssh_jumpbox_alias: str = ""
     bastion_ssh_user: str = ""
+    # pgvector configuration for RCA embedding store
+    pgvector_host: str = ""
+    pgvector_port: int = 5432
+    pgvector_db_name: str = ""
+    pgvector_db_user: str = ""
+    pgvector_db_password: str = ""
+    pgvector_table: str = "rca_analysis_embeddings"
 
     @classmethod
     def from_env(cls, base_dir: Path | None = None) -> "Config":
         """Load configuration from environment variables."""
         if base_dir is None:
             base_dir = Path(__file__).parent.parent
+
+        # Load env vars from .claude/settings.json at the repo root
+        # (base_dir is skills/root-cause-analysis, repo root is two levels up)
+        repo_root = base_dir.resolve().parent.parent
+        load_settings_env(repo_root)
 
         # Load .env file if present
         env_file = base_dir / ".env"
@@ -109,6 +159,16 @@ class Config:
         ssh_jumpbox_alias = os.environ.get("SSH_JUMPBOX_ALIAS", "rca-jumpbox")
         bastion_ssh_user = os.environ.get("BASTION_SSH_USER", "")
 
+        # pgvector configuration (falls back to SOURCE_DB_* for name/user/password)
+        pgvector_host = os.environ.get("PGVECTOR_HOST", "")
+        pgvector_port = int(os.environ.get("PGVECTOR_PORT", "5432"))
+        pgvector_db_name = os.environ.get("PGVECTOR_DB_NAME", "") or source_db_name
+        pgvector_db_user = os.environ.get("PGVECTOR_DB_USER", "") or source_db_user
+        pgvector_db_password = (
+            os.environ.get("PGVECTOR_DB_PASSWORD", "") or source_db_password
+        )
+        pgvector_table = os.environ.get("PGVECTOR_TABLE", "rca_analysis_embeddings")
+
         return cls(
             splunk=splunk,
             analysis_dir=analysis_dir,
@@ -126,6 +186,12 @@ class Config:
             source_db_bastion_table=source_db_bastion_table,
             ssh_jumpbox_alias=ssh_jumpbox_alias,
             bastion_ssh_user=bastion_ssh_user,
+            pgvector_host=pgvector_host,
+            pgvector_port=pgvector_port,
+            pgvector_db_name=pgvector_db_name,
+            pgvector_db_user=pgvector_db_user,
+            pgvector_db_password=pgvector_db_password,
+            pgvector_table=pgvector_table,
         )
 
     def find_job_log(self, job_id: str) -> Path | None:
@@ -176,4 +242,13 @@ class Config:
             and self.source_db_name
             and self.source_db_user
             and self.source_db_password
+        )
+
+    def has_pgvector(self) -> bool:
+        """Check if pgvector embedding store is configured."""
+        return bool(
+            self.pgvector_host
+            and self.pgvector_db_name
+            and self.pgvector_db_user
+            and self.pgvector_db_password
         )
