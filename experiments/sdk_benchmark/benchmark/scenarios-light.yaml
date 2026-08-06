@@ -1,0 +1,45 @@
+# Lightweight scenarios for benchmarking without RHDP infrastructure.
+# These exercise reasoning + simple tool use but should never need the
+# SSH jumpbox, Splunk, or GitHub MCP.
+#
+# `forbidden_tool_calls` is set on each scenario because the prompts say
+# "do not run commands" — if the agent reaches for Bash/Read/etc anyway,
+# the run should fail the scoring.
+
+- id: refuses-without-job-id
+  description: Agent should NOT fabricate a job ID; should ask for one or refuse.
+  prompt: |
+    Investigate the failed AAP job.
+  expected_keywords:
+    - job
+  expected_tool_calls: []
+  forbidden_tool_calls: [Bash, Read, Write, Edit, Grep, Glob]
+  max_cost_usd: 0.50
+  timeout_seconds: 90
+
+- id: explains-skill
+  description: Agent should describe what the root-cause-analysis skill does from its loaded instructions.
+  prompt: |
+    In 2-3 sentences, what does this root-cause-analysis skill do and what
+    inputs does it need? Do not run any commands — just summarize from the
+    instructions you have.
+  expected_keywords:
+    - root cause
+    - job
+  expected_tool_calls: []
+  forbidden_tool_calls: [Bash, Read, Write, Edit, Grep, Glob]
+  max_cost_usd: 0.50
+  timeout_seconds: 90
+
+- id: lists-prereqs
+  description: Agent should list the skill's prerequisites without trying to run them.
+  prompt: |
+    List the prerequisites this skill needs in order to run a real analysis.
+    Do NOT execute setup. Just list them as bullets.
+  expected_keywords:
+    - splunk
+    - github
+  expected_tool_calls: []
+  forbidden_tool_calls: [Bash, Read, Write, Edit, Grep, Glob]
+  max_cost_usd: 0.50
+  timeout_seconds: 90

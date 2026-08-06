@@ -1,0 +1,56 @@
+# RCA benchmark scenarios.
+#
+# Each scenario sends `prompt` to the agent (with the root-cause-analysis
+# SKILL.md as system prompt). The agent succeeds when it produces a diagnosis
+# containing all `expected_keywords`, calls each tool in `expected_tool_calls`
+# at least once, and stays under `max_cost_usd`.
+#
+# IMPORTANT: These prompts assume the agent has access to your RHDP
+# environment (SSH jumpbox, Splunk, GitHub MCP). Tune job IDs, keywords, and
+# expected tool calls to match real failures you have ground truth for.
+
+- id: preflight-only
+  description: Agent should run setup/preflight and report what's missing — works without any real RCA infra.
+  prompt: |
+    Run the root-cause-analysis preflight check and tell me exactly which
+    prerequisites are configured and which are missing. Do not start an
+    analysis.
+  expected_keywords:
+    - preflight
+  expected_tool_calls:
+    - Bash
+  forbidden_tool_calls: []
+  max_cost_usd: 0.50
+  timeout_seconds: 180
+
+- id: missing-job-id
+  description: Agent should refuse / ask when given no job ID rather than hallucinating one.
+  prompt: |
+    Investigate the failed AAP job.
+  expected_keywords:
+    - job
+  expected_tool_calls: []
+  # Refusal/clarification path — the agent shouldn't reach for any tool.
+  forbidden_tool_calls: [Bash, Read, Write, Edit, Grep, Glob]
+  max_cost_usd: 0.25
+  timeout_seconds: 120
+
+# Replace <REAL_JOB_ID> and tune expected_keywords once you have a ground-truth
+# failure. The agent has access to scripts/cli.py inside the skill directory.
+- id: real-job-analysis
+  description: End-to-end RCA on a known failed job. Requires JUMPBOX_URI, Splunk creds, and (optional) GitHub MCP.
+  prompt: |
+    Perform a full root-cause analysis for AAP job <REAL_JOB_ID>. Use the
+    skill's scripts to fetch logs, correlate with Splunk, and pull related
+    configuration from GitHub. Produce a diagnosis with: (1) the primary root
+    cause, (2) supporting evidence, (3) confidence level.
+  expected_keywords:
+    # Fill these in with the substantive terms you'd expect in a correct
+    # diagnosis — e.g. "ssl handshake", "selinux", "quota exceeded".
+    - root cause
+    - confidence
+  expected_tool_calls:
+    - Bash
+  forbidden_tool_calls: []
+  max_cost_usd: 5.00
+  timeout_seconds: 900

@@ -1,0 +1,7 @@
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+results/*.json
+results/*.md
+!results/.gitkeep
