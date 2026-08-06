@@ -15,6 +15,7 @@ import argparse
 import difflib
 import json
 import sys
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -23,6 +24,7 @@ import psycopg2.sql
 from utils import connect_db, load_config
 
 MATCH_THRESHOLD = 0.75
+CROSS_CATALOG_THRESHOLD = 0.90
 
 
 def extract_catalog_item(job_name: str) -> str | None:
@@ -123,41 +125,152 @@ def build_catalog_index(recent_results: list[dict[str, Any]]) -> dict[str, dict[
     }
 
 
-def pre_filter(
+def build_category_index(recent_results: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """Build root_cause_category -> [results] index for cross-catalog matching."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for result in recent_results:
+        cat = result.get("root_cause_category")
+        if not cat:
+            continue
+        grouped.setdefault(cat, []).append(result)
+    return grouped
+
+
+def filter_jobs(
+    job_ids: list[int],
     job_metadata: dict[int, dict[str, Any]],
-    catalog_index: dict[str, dict[str, Any]],
-) -> dict[str, Any]:
-    analyze = []
-    pre_matched = []
+    find_match: Callable[[int, dict[str, Any]], dict[str, Any] | None],
+    match_reason: str,
+) -> tuple[list[int], list[dict[str, Any]]]:
+    """Split job_ids into (analyze, matched) using the find_match callback."""
+    analyze: list[int] = []
+    matched: list[dict[str, Any]] = []
 
-    for job_id, meta in job_metadata.items():
-        extracted = extract_catalog_item(meta["job_name"])
-        matched_result = catalog_index.get(extracted) if extracted else None
-
-        if matched_result:
-            new_err = meta.get("error_message") or ""
-            known_err = matched_result.get("error_message") or ""
-
-            if not new_err or not known_err:
-                matched_result = None  # can't compare — send to full RCA
-            elif error_similarity(new_err, known_err) < MATCH_THRESHOLD:
-                matched_result = None  # different error — send to full RCA
-
-        if matched_result:
-            pre_matched.append(
+    for job_id in job_ids:
+        meta = job_metadata.get(job_id, {})
+        result = find_match(job_id, meta)
+        if result:
+            matched.append(
                 {
                     "job_id": job_id,
-                    "matched_result_id": matched_result["id"],
-                    "catalog_item": matched_result["catalog_item"],
-                    "root_cause_category": matched_result["root_cause_category"],
-                    "match_reason": "pre_filter_catalog_item+error_message",
-                    "recent_result_summary": matched_result["root_cause_summary"][:200],
+                    "matched_result_id": result["id"],
+                    "catalog_item": result["catalog_item"],
+                    "root_cause_category": result["root_cause_category"],
+                    "match_reason": match_reason,
+                    "recent_result_summary": result["root_cause_summary"][:200],
                 }
             )
         else:
             analyze.append(job_id)
 
-    return {"analyze": analyze, "pre_matched": pre_matched}
+    return analyze, matched
+
+
+def _catalog_matcher(
+    catalog_index: dict[str, dict[str, Any]],
+) -> Callable[[int, dict[str, Any]], dict[str, Any] | None]:
+    def find_match(_job_id: int, meta: dict[str, Any]) -> dict[str, Any] | None:
+        extracted = extract_catalog_item(meta.get("job_name", ""))
+        result = catalog_index.get(extracted) if extracted else None
+        if not result:
+            return None
+        new_err = meta.get("error_message") or ""
+        known_err = result.get("error_message") or ""
+        if not new_err or not known_err:
+            return None
+        if error_similarity(new_err, known_err) < MATCH_THRESHOLD:
+            return None
+        return result
+
+    return find_match
+
+
+def _cross_catalog_matcher(
+    category_index: dict[str, list[dict[str, Any]]],
+) -> Callable[[int, dict[str, Any]], dict[str, Any] | None]:
+    def find_match(_job_id: int, meta: dict[str, Any]) -> dict[str, Any] | None:
+        new_err = meta.get("error_message") or ""
+        if not new_err:
+            return None
+        best_result = None
+        best_score = CROSS_CATALOG_THRESHOLD
+        for results in category_index.values():
+            for result in results:
+                known_err = result.get("error_message") or ""
+                if not known_err:
+                    continue
+                score = error_similarity(new_err, known_err)
+                if score >= best_score:
+                    best_score = score
+                    best_result = result
+        return best_result
+
+    return find_match
+
+
+def fetch_job_metadata(
+    conn: Any, source_table: str, job_ids: list[int]
+) -> dict[int, dict[str, Any]]:
+    with conn.cursor() as cur:
+        cur.execute(
+            psycopg2.sql.SQL(
+                "SELECT job_id, job_name, error_message FROM {} WHERE job_id = ANY(%s)"
+            ).format(psycopg2.sql.Identifier(source_table)),
+            (job_ids,),
+        )
+        return {
+            row["job_id"]: {
+                "job_name": row["job_name"],
+                "error_message": row["error_message"],
+            }
+            for row in cur.fetchall()
+            if row["job_name"]
+        }
+
+
+def dedup_batch(
+    job_ids: list[int],
+    job_metadata: dict[int, dict[str, Any]],
+) -> tuple[list[int], list[dict[str, Any]]]:
+    """Group jobs by catalog_item + error_message similarity, pick earliest per group."""
+    by_catalog: dict[str, list[int]] = {}
+    for job_id in job_ids:
+        meta = job_metadata.get(job_id)
+        if not meta:
+            by_catalog.setdefault("__unknown__", []).append(job_id)
+            continue
+        ci = extract_catalog_item(meta.get("job_name", "")) or "__unknown__"
+        by_catalog.setdefault(ci, []).append(job_id)
+
+    representatives: list[int] = []
+    dupes: list[dict[str, Any]] = []
+
+    for group_ids in by_catalog.values():
+        if len(group_ids) == 1:
+            representatives.append(group_ids[0])
+            continue
+
+        sorted_ids = sorted(group_ids)
+
+        clusters: list[list[int]] = []
+        for job_id in sorted_ids:
+            err = (job_metadata.get(job_id) or {}).get("error_message") or ""
+            placed = False
+            for cluster in clusters:
+                rep_err = (job_metadata.get(cluster[0]) or {}).get("error_message") or ""
+                if err and rep_err and error_similarity(err, rep_err) >= MATCH_THRESHOLD:
+                    cluster.append(job_id)
+                    placed = True
+                    break
+            if not placed:
+                clusters.append([job_id])
+
+        for cluster in clusters:
+            representatives.append(cluster[0])
+            for dupe_id in cluster[1:]:
+                dupes.append({"job_id": dupe_id, "representative_job_id": cluster[0]})
+
+    return representatives, dupes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -171,6 +284,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--lookback-hours", type=int, default=4, help="Lookback window (default: 4)"
     )
+    parser.add_argument(
+        "--dedup-only",
+        action="store_true",
+        help="Only run intra-batch dedup (no pre-filter against known issues)",
+    )
     args = parser.parse_args(argv)
 
     if args.input:
@@ -181,11 +299,18 @@ def main(argv: list[str] | None = None) -> int:
 
     job_ids = [int(line.strip()) for line in raw.strip().splitlines() if line.strip()]
     if not job_ids:
-        print(json.dumps({"analyze": [], "pre_matched": []}))
+        if args.dedup_only:
+            print(json.dumps({"representatives": job_ids, "dupes": []}))
+        else:
+            print(json.dumps({"analyze": [], "pre_matched": []}))
         return 0
 
+    required_keys = ("name", "user", "password", "source_table")
+    if not args.dedup_only:
+        required_keys = (*required_keys, "results_table")
+
     try:
-        config = load_config(required=("name", "user", "password", "source_table", "results_table"))
+        config = load_config(required=required_keys)
     except SystemExit:
         return 1
 
@@ -196,22 +321,40 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        recent_results, job_metadata = fetch_filter_context(
-            conn,
-            config["results_table"],
-            config["source_table"],
-            job_ids,
-            args.lookback_hours,
-        )
-        if not recent_results:
-            print(json.dumps({"analyze": job_ids, "pre_matched": []}))
-            return 0
+        if args.dedup_only:
+            job_metadata = fetch_job_metadata(conn, config["source_table"], job_ids)
+            representatives, dupes = dedup_batch(job_ids, job_metadata)
+            result = {"representatives": representatives, "dupes": dupes}
+        else:
+            recent_results, job_metadata = fetch_filter_context(
+                conn,
+                config["results_table"],
+                config["source_table"],
+                job_ids,
+                args.lookback_hours,
+            )
+            catalog_index = build_catalog_index(recent_results) if recent_results else {}
+            category_index = build_category_index(recent_results) if recent_results else {}
 
-        catalog_index = build_catalog_index(recent_results)
+            unknown_ids = [jid for jid in job_ids if jid not in job_metadata]
 
-        unknown_ids = [jid for jid in job_ids if jid not in job_metadata]
-        result = pre_filter(job_metadata, catalog_index)
-        result["analyze"].extend(unknown_ids)
+            # First pass: match by catalog_item + error similarity
+            analyze, pre_matched = filter_jobs(
+                list(job_metadata.keys()),
+                job_metadata,
+                _catalog_matcher(catalog_index),
+                "pre_filter_catalog_item+error_message",
+            )
+            analyze.extend(unknown_ids)
+
+            # Second pass: cross-catalog match for platform-level failures
+            analyze, cross_matched = filter_jobs(
+                analyze,
+                job_metadata,
+                _cross_catalog_matcher(category_index),
+                "cross_catalog_error_message",
+            )
+            result = {"analyze": analyze, "pre_matched": pre_matched + cross_matched}
 
     except psycopg2.Error as e:
         print(f"Query failed: {e}", file=sys.stderr)
