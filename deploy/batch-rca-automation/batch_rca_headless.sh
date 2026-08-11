@@ -111,6 +111,38 @@ JOBS_LIST=$(echo "$JOB_IDS" | tr '\n' ' ' | sed 's/ $//')
 echo "[INFO] Found $JOB_COUNT job(s) to analyze: $JOBS_LIST"
 
 #############################################
+# Step 1a: Intra-batch dedup
+#############################################
+echo "[STEP 1a] Deduplicating within batch..."
+
+INTRA_BATCH_DUPES="[]"
+DUPE_COUNT=0
+
+DEDUP_OUTPUT=$(echo "$JOB_IDS" | python3 "$SCRIPT_DIR/scripts/pre_filter_jobs.py" --dedup-only 2>/dev/null) || DEDUP_OUTPUT=""
+
+if [ -n "$DEDUP_OUTPUT" ]; then
+  DUPE_COUNT=$(echo "$DEDUP_OUTPUT" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('dupes', [])))" 2>/dev/null || echo "0")
+
+  if [ "$DUPE_COUNT" -gt 0 ] 2>/dev/null; then
+    INTRA_BATCH_DUPES=$(echo "$DEDUP_OUTPUT" | python3 -c "
+import json, sys
+print(json.dumps(json.load(sys.stdin).get('dupes', [])))
+")
+
+    JOB_IDS=$(echo "$DEDUP_OUTPUT" | python3 -c "
+import json, sys
+for jid in json.load(sys.stdin).get('representatives', []):
+    print(jid)
+")
+    JOB_COUNT=$(echo "$JOB_IDS" | wc -l | tr -d ' ')
+    JOBS_LIST=$(echo "$JOB_IDS" | tr '\n' ' ' | sed 's/ $//')
+    echo "[INFO] Intra-batch dedup: $DUPE_COUNT duplicate(s) removed, $JOB_COUNT representative(s): $JOBS_LIST"
+  else
+    echo "[INFO] No intra-batch duplicates found"
+  fi
+fi
+
+#############################################
 # Step 1b: Pre-filter against known issues
 #############################################
 PRE_MATCHED="[]"
@@ -167,6 +199,12 @@ for jid in json.load(sys.stdin).get('analyze', []):
         echo "[INFO] Remaining: $JOB_COUNT job(s) for full RCA: $JOBS_LIST"
       else
         echo "[INFO] All jobs matched known issues, skipping Claude invocation"
+        if [ "$DUPE_COUNT" -gt 0 ] 2>/dev/null && [ "$INTRA_BATCH_DUPES" != "[]" ]; then
+          echo "[STEP 5b] Linking $DUPE_COUNT intra-batch duplicate(s)..."
+          python3 "$SCRIPT_DIR/scripts/store_report.py" --link-dupes "$INTRA_BATCH_DUPES" || {
+            echo "[WARN] Failed to link some intra-batch duplicates (non-fatal)"
+          }
+        fi
         echo "[SUCCESS] Batch RCA completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
         exit 0
       fi
@@ -304,6 +342,16 @@ python3 "$SCRIPT_DIR/scripts/store_report.py" "$REPORT_FILE" || {
   echo "[ERROR] Failed to store report in database"
   exit 1
 }
+
+#############################################
+# Step 5b: Link intra-batch duplicates
+#############################################
+if [ "$DUPE_COUNT" -gt 0 ] 2>/dev/null && [ "$INTRA_BATCH_DUPES" != "[]" ]; then
+  echo "[STEP 5b] Linking $DUPE_COUNT intra-batch duplicate(s)..."
+  python3 "$SCRIPT_DIR/scripts/store_report.py" --link-dupes "$INTRA_BATCH_DUPES" || {
+    echo "[WARN] Failed to link some intra-batch duplicates (non-fatal)"
+  }
+fi
 
 echo "[SUCCESS] Batch RCA completed at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo "[INFO] Report: $REPORT_FILE"
