@@ -42,13 +42,13 @@ def find_match(cur: Any, results_table: str, job: dict[str, Any]) -> int | None:
     return None
 
 
-def _validate_match_id(cur: Any, results_table: str, matched_id: int, job: dict[str, Any]) -> bool:
+def _validate_match_id(cur: Any, results_table: str, matched_id: int) -> bool:
+    """Confirm the agent's cited match exists and is a high-confidence result."""
     cur.execute(
-        psycopg2.sql.SQL(
-            """SELECT 1 FROM {}
-               WHERE id = %s AND root_cause_category = %s AND confidence = 'high'"""
-        ).format(psycopg2.sql.Identifier(results_table)),
-        (matched_id, job.get("root_cause_category")),
+        psycopg2.sql.SQL("SELECT 1 FROM {} WHERE id = %s AND confidence = 'high'").format(
+            psycopg2.sql.Identifier(results_table)
+        ),
+        (matched_id,),
     )
     return cur.fetchone() is not None
 
@@ -82,7 +82,7 @@ def store_report(
                         candidate_id = hist[0].get("matched_result_id")
 
                 if candidate_id is not None:
-                    if _validate_match_id(cur, results_table, candidate_id, job):
+                    if _validate_match_id(cur, results_table, candidate_id):
                         matched_id = candidate_id
                         print(f"[MATCH-AGENT] job {jid} -> result {matched_id} (validated)")
                     else:
