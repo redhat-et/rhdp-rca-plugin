@@ -22,7 +22,7 @@ def query_job_ids(
     params: list[Any] = []
 
     if since:
-        conditions.append("job_started >= %s")
+        conditions.append("job_finished >= %s")
         params.append(since)
 
     suffix = ""
