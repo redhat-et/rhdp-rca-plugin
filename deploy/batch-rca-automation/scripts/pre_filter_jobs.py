@@ -21,7 +21,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.sql
-from utils import connect_db, load_config
+from utils import connect_db, known_issue_active_sql, load_config
 
 MATCH_THRESHOLD = 0.75
 CROSS_CATALOG_THRESHOLD = 0.90
@@ -76,10 +76,12 @@ def fetch_filter_context(
                    WHERE r.confidence = 'high'
                      AND r.batch_id >= %s
                      AND r.status = 'analyzed'
+                     AND {active}
                    ORDER BY r.batch_id DESC"""
             ).format(
                 results=psycopg2.sql.Identifier(results_table),
                 source=psycopg2.sql.Identifier(source_table),
+                active=known_issue_active_sql(alias="r"),
             ),
             (cutoff_batch_id,),
         )

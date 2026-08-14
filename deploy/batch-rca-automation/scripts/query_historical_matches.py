@@ -13,7 +13,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.sql
-from utils import connect_db, load_config
+from utils import connect_db, known_issue_active_sql, load_config
 
 
 def query_matches(
@@ -44,8 +44,9 @@ def query_matches(
         " AND (root_cause_category, catalog_item) IN (" + in_clause + ")"
         " AND confidence IN ('high', 'medium')"
         " AND status = 'analyzed'"
+        " AND {active}"
         " ORDER BY batch_id DESC"
-    ).format(psycopg2.sql.Identifier(table))
+    ).format(psycopg2.sql.Identifier(table), active=known_issue_active_sql())
 
     params: list[Any] = [cutoff_batch_id]
     if exclude_batch:
@@ -57,8 +58,9 @@ def query_matches(
             " AND (root_cause_category, catalog_item) IN (" + in_clause + ")"
             " AND confidence IN ('high', 'medium')"
             " AND status = 'analyzed'"
+            " AND {active}"
             " ORDER BY batch_id DESC"
-        ).format(psycopg2.sql.Identifier(table))
+        ).format(psycopg2.sql.Identifier(table), active=known_issue_active_sql())
         params = [cutoff_batch_id, exclude_batch]
 
     params.extend(tuple_values)

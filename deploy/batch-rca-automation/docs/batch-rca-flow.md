@@ -36,8 +36,10 @@ flowchart TD
         direction TB
         F0{--no-pre-filter<br/>flag set?}
         F1[fetch_known_issues.py<br/>Query recent high-confidence results<br/>from last 4 hours]
+        F1a["Exclude rows where ticket closed<br/>(is_open=false) >= 4h ago"]
         F2{Known issues<br/>found?}
         F3["pre_filter_jobs.py<br/>(normal mode)"]
+        F3a["Same active-ticket filter applied<br/>to fetch_filter_context query"]
         F4["Pass 1: Match on catalog_item<br/>+ error_message similarity >= 0.75"]
         F5["Pass 2: Cross-catalog match on<br/>error_message similarity >= 0.90<br/>(catches platform-wide failures)"]
         F6{Pre-matched<br/>jobs?}
@@ -47,9 +49,9 @@ flowchart TD
         F10[Skip pre-filter]
 
         F0 -- Yes --> F10
-        F0 -- No --> F1 --> F2
+        F0 -- No --> F1 --> F1a --> F2
         F2 -- No --> F10
-        F2 -- Yes --> F3 --> F4 --> F5 --> F6
+        F2 -- Yes --> F3 --> F3a --> F4 --> F5 --> F6
         F6 -- No --> F10
         F6 -- Yes --> F7 --> F8
         F8 -- No, all matched --> F9 --> Done2([Exit 0])
@@ -117,7 +119,7 @@ flowchart TD
         ST4["Validate match:<br/>id + root_cause_category<br/>+ confidence = high"]
         ST5{Valid?}
         ST6["Use matched FK<br/>Update source: FK + ai_processed"]
-        ST7["Fallback: find_match()<br/>difflib similarity >= 0.85<br/>same catalog_item + category"]
+        ST7["Fallback: find_match()<br/>difflib similarity >= 0.85<br/>same catalog_item + category<br/>+ excludes closed tickets (>=4h)"]
         ST8{Match found?}
         ST9["INSERT into results table<br/>Update source: FK + ai_processed"]
 
@@ -155,4 +157,6 @@ flowchart TD
     style PerAgent fill:#e2d6f3
     style Step5 fill:#d4edda
     style Step5b fill:#d4edda
+    style F1a fill:#ffe0b2
+    style F3a fill:#ffe0b2
 ```
