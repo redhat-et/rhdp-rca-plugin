@@ -323,6 +323,16 @@ claude -p \
 rm -f "$CLAUDE_STDERR_FILE"
 
 #############################################
+# Step 4a: Log cost to MLflow
+#############################################
+if grep -q "MLFLOW_CLAUDE_TRACING_ENABLED.*true" "$SETTINGS_FILE" 2>/dev/null; then
+  echo "[STEP 4a] Logging cost to MLflow..."
+  "$MLFLOW_VENV/bin/python3" "$SCRIPT_DIR/scripts/log_mlflow_cost.py" \
+    --batch-id "$BATCH_ID" \
+    --model "$CLAUDE_MODEL" || echo "[WARN] Failed to log cost to MLflow (non-fatal)"
+fi
+
+#############################################
 # Step 4b: Verify report was written
 #############################################
 echo "[STEP 4b] Verifying report..."
