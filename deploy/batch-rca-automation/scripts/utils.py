@@ -107,8 +107,7 @@ def known_issue_active_sql(
 
     def event_col(column: str) -> psycopg2.sql.Composable:
         return psycopg2.sql.SQL(
-            "(SELECT e.{column} FROM {source} e"
-            " WHERE e.job_id::text = {job_id}::text LIMIT 1)"
+            "(SELECT e.{column} FROM {source} e WHERE e.job_id::text = {job_id}::text LIMIT 1)"
         ).format(
             column=psycopg2.sql.Identifier(column),
             source=psycopg2.sql.Identifier(table),
@@ -116,8 +115,7 @@ def known_issue_active_sql(
         )
 
     return psycopg2.sql.SQL(
-        "({tl} IS NULL OR {rd} IS NULL"
-        " OR {rd} > NOW() - make_interval(hours => {h}))"
+        "({tl} IS NULL OR {rd} IS NULL OR {rd} > NOW() - make_interval(hours => {h}))"
     ).format(
         tl=event_col("ticket_link"),
         rd=event_col("ticket_resolve_datetime_gmt"),

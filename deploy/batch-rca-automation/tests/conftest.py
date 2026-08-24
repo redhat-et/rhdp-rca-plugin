@@ -71,7 +71,9 @@ def db_conn() -> Generator[psycopg2.extensions.connection, None, None]:
 
 
 @pytest.fixture
-def db(db_conn: psycopg2.extensions.connection) -> Generator[psycopg2.extensions.connection, None, None]:
+def db(
+    db_conn: psycopg2.extensions.connection,
+) -> Generator[psycopg2.extensions.connection, None, None]:
     with db_conn.cursor() as cur:
         cur.execute(f"TRUNCATE {RESULTS_TABLE} RESTART IDENTITY CASCADE")
         cur.execute(f"TRUNCATE {SOURCE_TABLE} RESTART IDENTITY CASCADE")

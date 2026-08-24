@@ -58,9 +58,7 @@ def _insert_result(conn: psycopg2.extensions.connection, job_id: int) -> int:
 def _is_active(conn: psycopg2.extensions.connection, result_id: int) -> bool:
     with conn.cursor() as cur:
         cur.execute(
-            psycopg2.sql.SQL(
-                "SELECT {active} FROM {results} r WHERE r.id = %s"
-            ).format(
+            psycopg2.sql.SQL("SELECT {active} FROM {results} r WHERE r.id = %s").format(
                 active=known_issue_active_sql(conn, alias="r", source_table=SOURCE_TABLE),
                 results=psycopg2.sql.Identifier(RESULTS_TABLE),
             ),
