@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE_FILE="$ROOT/docker-compose.test.yml"
+TESTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="$TESTS_DIR/docker-compose.test.yml"
 
 export TEST_DB_HOST="${TEST_DB_HOST:-localhost}"
 export TEST_DB_PORT="${TEST_DB_PORT:-5433}"
@@ -23,4 +23,4 @@ echo "[INFO] Starting Postgres test container..."
 docker compose -f "$COMPOSE_FILE" up -d --wait
 
 echo "[INFO] Running integration tests..."
-python3 -m pytest "$ROOT/tests" -v "$@"
+python3 -m pytest "$TESTS_DIR" -v "$@"
