@@ -9,7 +9,7 @@ import psycopg2.sql
 import pytest
 
 from conftest import RESULTS_TABLE, SOURCE_TABLE
-from utils import known_issue_active_sql
+from utils import _ticket_columns_present, known_issue_active_sql
 
 UTC = timezone.utc
 
@@ -61,7 +61,7 @@ def _is_active(conn: psycopg2.extensions.connection, result_id: int) -> bool:
             psycopg2.sql.SQL(
                 "SELECT {active} FROM {results} r WHERE r.id = %s"
             ).format(
-                active=known_issue_active_sql(alias="r", source_table=SOURCE_TABLE),
+                active=known_issue_active_sql(conn, alias="r", source_table=SOURCE_TABLE),
                 results=psycopg2.sql.Identifier(RESULTS_TABLE),
             ),
             (result_id,),
@@ -112,6 +112,32 @@ def test_known_issue_active_when_event_row_missing(db: psycopg2.extensions.conne
     assert _is_active(db, result_id) is True
 
 
+def test_known_issue_active_when_ticket_columns_missing(
+    db: psycopg2.extensions.connection, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Source table missing ticket_link/ticket_resolve_datetime_gmt -> filtering
+    disabled, a warning is printed, and rows are treated as active regardless."""
+    _ticket_columns_present.pop(RESULTS_TABLE, None)
+
+    result_id = _insert_result(db, job_id=999002)
+
+    with db.cursor() as cur:
+        cur.execute(
+            psycopg2.sql.SQL("SELECT {active} FROM {results} r WHERE r.id = %s").format(
+                active=known_issue_active_sql(db, alias="r", source_table=RESULTS_TABLE),
+                results=psycopg2.sql.Identifier(RESULTS_TABLE),
+            ),
+            (result_id,),
+        )
+        row = cur.fetchone()
+        assert row is not None
+        assert bool(row[0]) is True
+
+    warning = capsys.readouterr().err
+    assert "missing" in warning
+    assert RESULTS_TABLE in warning
+
+
 def test_known_issue_active_in_prefilter_style_query(db: psycopg2.extensions.connection) -> None:
     """Matches how pre_filter_jobs.py embeds the fragment in a WHERE clause."""
     _insert_event(
@@ -145,7 +171,7 @@ def test_known_issue_active_in_prefilter_style_query(db: psycopg2.extensions.con
                 """
             ).format(
                 results=psycopg2.sql.Identifier(RESULTS_TABLE),
-                active=known_issue_active_sql(alias="r", source_table=SOURCE_TABLE),
+                active=known_issue_active_sql(db, alias="r", source_table=SOURCE_TABLE),
             ),
         )
         ids = [row[0] for row in cur.fetchall()]

@@ -46,7 +46,7 @@ def query_matches(
         " AND status = 'analyzed'"
         " AND {active}"
         " ORDER BY batch_id DESC"
-    ).format(psycopg2.sql.Identifier(table), active=known_issue_active_sql())
+    ).format(psycopg2.sql.Identifier(table), active=known_issue_active_sql(conn))
 
     params: list[Any] = [cutoff_batch_id]
     if exclude_batch:
@@ -60,7 +60,7 @@ def query_matches(
             " AND status = 'analyzed'"
             " AND {active}"
             " ORDER BY batch_id DESC"
-        ).format(psycopg2.sql.Identifier(table), active=known_issue_active_sql())
+        ).format(psycopg2.sql.Identifier(table), active=known_issue_active_sql(conn))
         params = [cutoff_batch_id, exclude_batch]
 
     params.extend(tuple_values)

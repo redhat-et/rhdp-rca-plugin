@@ -26,6 +26,31 @@ ALL_CONFIG_KEYS = {
 # recency windows used elsewhere in this pipeline.
 TICKET_CLOSED_GRACE_HOURS = 4
 
+_TICKET_COLUMNS = ("ticket_link", "ticket_resolve_datetime_gmt")
+
+# Per-table cache so the schema is only probed once per process, not once per query.
+_ticket_columns_present: dict[str, bool] = {}
+
+
+def _has_ticket_columns(conn: Any, table: str) -> bool:
+    if table not in _ticket_columns_present:
+        with conn.cursor(cursor_factory=psycopg2.extensions.cursor) as cur:
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns"
+                " WHERE table_name = %s AND column_name = ANY(%s)",
+                (table, list(_TICKET_COLUMNS)),
+            )
+            found = {row[0] for row in cur.fetchall()}
+        present = set(_TICKET_COLUMNS) <= found
+        if not present:
+            print(
+                f"[WARN] {table} is missing {', '.join(_TICKET_COLUMNS)}; "
+                "known-issue ticket filtering disabled, treating all known issues as active",
+                file=sys.stderr,
+            )
+        _ticket_columns_present[table] = present
+    return _ticket_columns_present[table]
+
 
 def load_config(required: tuple[str, ...] = ("name", "user", "password")) -> dict[str, Any]:
     env_file = os.path.join(os.path.dirname(__file__), "..", ".env")
@@ -46,6 +71,7 @@ def load_config(required: tuple[str, ...] = ("name", "user", "password")) -> dic
 
 
 def known_issue_active_sql(
+    conn: Any,
     alias: str = "",
     *,
     source_table: str | None = None,
@@ -60,6 +86,10 @@ def known_issue_active_sql(
     A row is excluded only when ticket_link is set and
     ticket_resolve_datetime_gmt is old enough. Every other combination (no
     ticket, or an unknown/recent resolve time) is active.
+
+    If the source table is missing ticket_link/ticket_resolve_datetime_gmt
+    (schema drift), ticket filtering is disabled and every row is treated as
+    active -- a warning is printed once per table.
     """
 
     def col(name: str) -> psycopg2.sql.Identifier:
@@ -71,6 +101,9 @@ def known_issue_active_sql(
             "source_table is required for known_issue_active_sql "
             "(pass explicitly or set SOURCE_DB_TABLE)"
         )
+
+    if not _has_ticket_columns(conn, table):
+        return psycopg2.sql.SQL("TRUE")
 
     def event_col(column: str) -> psycopg2.sql.Composable:
         return psycopg2.sql.SQL(

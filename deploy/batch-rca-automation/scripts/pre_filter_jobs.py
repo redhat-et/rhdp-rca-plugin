@@ -81,7 +81,7 @@ def fetch_filter_context(
             ).format(
                 results=psycopg2.sql.Identifier(results_table),
                 source=psycopg2.sql.Identifier(source_table),
-                active=known_issue_active_sql(alias="r"),
+                active=known_issue_active_sql(conn, alias="r"),
             ),
             (cutoff_batch_id,),
         )
