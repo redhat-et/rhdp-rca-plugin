@@ -36,7 +36,7 @@ flowchart TD
         direction TB
         F0{--no-pre-filter<br/>flag set?}
         F1[fetch_known_issues.py<br/>Query recent high-confidence results<br/>from last 4 hours]
-        F1a["Exclude rows where ticket closed<br/>(is_open=false) >= 4h ago"]
+        F1a["Exclude rows where aap2_events ticket<br/>closed >= 4h before job_finished"]
         F2{Known issues<br/>found?}
         F3["pre_filter_jobs.py<br/>(normal mode)"]
         F3a["Same active-ticket filter applied<br/>to fetch_filter_context query"]
