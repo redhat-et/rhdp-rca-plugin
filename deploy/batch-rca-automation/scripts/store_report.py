@@ -30,7 +30,8 @@ def find_match(cur: Any, results_table: str, job: dict[str, Any]) -> int | None:
                  AND confidence = 'high' AND batch_id >= %s
                  AND {active}"""
         ).format(
-            psycopg2.sql.Identifier(results_table), active=known_issue_active_sql(cur.connection)
+            psycopg2.sql.Identifier(results_table),
+            active=known_issue_active_sql(cur.connection, table=results_table),
         ),
         (job.get("root_cause_category"), job.get("catalog_item"), cutoff_batch_id),
     )

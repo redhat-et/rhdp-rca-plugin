@@ -17,35 +17,31 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _insert_event(
+def _insert_result(
     conn: psycopg2.extensions.connection,
     job_id: int,
-    job_finished: datetime,
     ticket_link: str | None = None,
     ticket_resolve: datetime | None = None,
-) -> None:
-    with conn.cursor() as cur:
-        cur.execute(
-            f"""
-            INSERT INTO {SOURCE_TABLE}
-                (job_id, job_finished, ticket_link, ticket_resolve_datetime_gmt)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (job_id, job_finished, ticket_link, ticket_resolve),
-        )
-    conn.commit()
-
-
-def _insert_result(conn: psycopg2.extensions.connection, job_id: int) -> int:
+) -> int:
     with conn.cursor() as cur:
         cur.execute(
             f"""
             INSERT INTO {RESULTS_TABLE}
-                (job_id, batch_id, confidence, status, catalog_item, root_cause_category)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                (job_id, batch_id, confidence, status, catalog_item, root_cause_category,
+                 ticket_link, ticket_resolve_datetime_gmt)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
-            (job_id, "batch_test", "high", "analyzed", "demo.item", "infra"),
+            (
+                job_id,
+                "batch_test",
+                "high",
+                "analyzed",
+                "demo.item",
+                "infra",
+                ticket_link,
+                ticket_resolve,
+            ),
         )
         row = cur.fetchone()
         assert row is not None
@@ -58,7 +54,7 @@ def _is_active(conn: psycopg2.extensions.connection, result_id: int) -> bool:
     with conn.cursor() as cur:
         cur.execute(
             psycopg2.sql.SQL("SELECT {active} FROM {results} r WHERE r.id = %s").format(
-                active=known_issue_active_sql(conn, alias="r", source_table=SOURCE_TABLE),
+                active=known_issue_active_sql(conn, alias="r", table=RESULTS_TABLE),
                 results=psycopg2.sql.Identifier(RESULTS_TABLE),
             ),
             (result_id,),
@@ -98,30 +94,23 @@ def test_known_issue_active_sql_cases(
 ) -> None:
     job_id = hash(label) % 1_000_000
     ticket_resolve = _now() - resolve_offset if resolve_offset is not None else None
-    _insert_event(db, job_id, _now(), ticket_link, ticket_resolve)
-    result_id = _insert_result(db, job_id)
+    result_id = _insert_result(db, job_id, ticket_link, ticket_resolve)
     assert _is_active(db, result_id) is expected
-
-
-def test_known_issue_active_when_event_row_missing(db: psycopg2.extensions.connection) -> None:
-    """No aap2_events row -> subqueries return NULL -> treated as active."""
-    result_id = _insert_result(db, job_id=999001)
-    assert _is_active(db, result_id) is True
 
 
 def test_known_issue_active_when_ticket_columns_missing(
     db: psycopg2.extensions.connection, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Source table missing ticket_link/ticket_resolve_datetime_gmt -> filtering
+    """Results table missing ticket_link/ticket_resolve_datetime_gmt -> filtering
     disabled, a warning is printed, and rows are treated as active regardless."""
-    _ticket_columns_present.pop(RESULTS_TABLE, None)
+    _ticket_columns_present.pop(SOURCE_TABLE, None)
 
     result_id = _insert_result(db, job_id=999002)
 
     with db.cursor() as cur:
         cur.execute(
             psycopg2.sql.SQL("SELECT {active} FROM {results} r WHERE r.id = %s").format(
-                active=known_issue_active_sql(db, alias="r", source_table=RESULTS_TABLE),
+                active=known_issue_active_sql(db, alias="r", table=SOURCE_TABLE),
                 results=psycopg2.sql.Identifier(RESULTS_TABLE),
             ),
             (result_id,),
@@ -132,28 +121,24 @@ def test_known_issue_active_when_ticket_columns_missing(
 
     warning = capsys.readouterr().err
     assert "missing" in warning
-    assert RESULTS_TABLE in warning
+    assert SOURCE_TABLE in warning
 
 
 def test_known_issue_active_in_prefilter_style_query(db: psycopg2.extensions.connection) -> None:
     """Matches how pre_filter_jobs.py embeds the fragment in a WHERE clause."""
-    _insert_event(
+    active_id = _insert_result(
         db,
         job_id=1001,
-        job_finished=_now(),
         ticket_link="https://jira.example/ABC-6",
         ticket_resolve=_now() - timedelta(hours=1),
     )
-    active_id = _insert_result(db, 1001)
 
-    _insert_event(
+    inactive_id = _insert_result(
         db,
         job_id=1002,
-        job_finished=_now(),
         ticket_link="https://jira.example/ABC-7",
         ticket_resolve=_now() - timedelta(hours=5),
     )
-    inactive_id = _insert_result(db, 1002)
 
     with db.cursor() as cur:
         cur.execute(
@@ -168,7 +153,7 @@ def test_known_issue_active_in_prefilter_style_query(db: psycopg2.extensions.con
                 """
             ).format(
                 results=psycopg2.sql.Identifier(RESULTS_TABLE),
-                active=known_issue_active_sql(db, alias="r", source_table=SOURCE_TABLE),
+                active=known_issue_active_sql(db, alias="r", table=RESULTS_TABLE),
             ),
         )
         ids = [row[0] for row in cur.fetchall()]

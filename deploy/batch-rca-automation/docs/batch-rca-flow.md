@@ -36,10 +36,10 @@ flowchart TD
         direction TB
         F0{--no-pre-filter<br/>flag set?}
         F1[fetch_known_issues.py<br/>Query recent high-confidence results<br/>from last 4 hours]
-        F1a["Exclude rows where aap2_events ticket<br/>closed >= 4h before job_finished"]
+        F1a["Exclude rows where result ticket<br/>closed >= 4h ago (ticket_resolve_datetime_gmt)"]
         F2{Known issues<br/>found?}
         F3["pre_filter_jobs.py<br/>(normal mode)"]
-        F3a["Same active-ticket filter applied<br/>to fetch_filter_context query"]
+        F3a["Same active-ticket filter on results row<br/>(ticket_link, ticket_resolve_datetime_gmt)"]
         F4["Pass 1: Match on catalog_item<br/>+ error_message similarity >= 0.75"]
         F5["Pass 2: Cross-catalog match on<br/>error_message similarity >= 0.90<br/>(catches platform-wide failures)"]
         F6{Pre-matched<br/>jobs?}
@@ -119,7 +119,7 @@ flowchart TD
         ST4["Validate match:<br/>id + root_cause_category<br/>+ confidence = high"]
         ST5{Valid?}
         ST6["Use matched FK<br/>Update source: FK + ai_processed"]
-        ST7["Fallback: find_match()<br/>difflib similarity >= 0.85<br/>same catalog_item + category<br/>+ excludes closed tickets (>=4h)"]
+        ST7["Fallback: find_match()<br/>difflib similarity >= 0.85<br/>same catalog_item + category<br/>+ excludes closed tickets on results row (>=4h)"]
         ST8{Match found?}
         ST9["INSERT into results table<br/>Update source: FK + ai_processed"]
 

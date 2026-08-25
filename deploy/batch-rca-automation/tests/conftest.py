@@ -22,9 +22,7 @@ DROP TABLE IF EXISTS {SOURCE_TABLE};
 
 CREATE TABLE {SOURCE_TABLE} (
     job_id BIGINT PRIMARY KEY,
-    job_finished TIMESTAMPTZ,
-    ticket_link TEXT,
-    ticket_resolve_datetime_gmt TIMESTAMPTZ
+    job_finished TIMESTAMPTZ
 );
 
 CREATE TABLE {RESULTS_TABLE} (
@@ -34,7 +32,9 @@ CREATE TABLE {RESULTS_TABLE} (
     confidence TEXT NOT NULL,
     status TEXT NOT NULL,
     catalog_item TEXT,
-    root_cause_category TEXT
+    root_cause_category TEXT,
+    ticket_link TEXT,
+    ticket_resolve_datetime_gmt TIMESTAMPTZ
 );
 """
 

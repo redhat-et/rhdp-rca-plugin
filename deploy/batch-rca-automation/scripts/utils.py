@@ -74,20 +74,19 @@ def known_issue_active_sql(
     conn: Any,
     alias: str = "",
     *,
-    source_table: str | None = None,
+    table: str,
 ) -> psycopg2.sql.Composable:
     """Boolean SQL fragment (no leading AND): TRUE unless the row's linked
     ticket is closed and has been for TICKET_CLOSED_GRACE_HOURS+.
 
-    ticket_link and ticket_resolve_datetime_gmt live on the source/events
-    table (aap2_events), not the results table, so they're read via a
-    correlated subquery keyed on the row's own job_id.
+    ticket_link and ticket_resolve_datetime_gmt live directly on the row
+    being filtered (the results table).
 
     A row is excluded only when ticket_link is set and
     ticket_resolve_datetime_gmt is old enough. Every other combination (no
     ticket, or an unknown/recent resolve time) is active.
 
-    If the source table is missing ticket_link/ticket_resolve_datetime_gmt
+    If the results table is missing ticket_link/ticket_resolve_datetime_gmt
     (schema drift), ticket filtering is disabled and every row is treated as
     active -- a warning is printed once per table.
     """
@@ -95,30 +94,17 @@ def known_issue_active_sql(
     def col(name: str) -> psycopg2.sql.Identifier:
         return psycopg2.sql.Identifier(alias, name) if alias else psycopg2.sql.Identifier(name)
 
-    table = source_table or os.environ.get("SOURCE_DB_TABLE", "")
     if not table:
-        raise ValueError(
-            "source_table is required for known_issue_active_sql "
-            "(pass explicitly or set SOURCE_DB_TABLE)"
-        )
+        raise ValueError("table is required for known_issue_active_sql")
 
     if not _has_ticket_columns(conn, table):
         return psycopg2.sql.SQL("TRUE")
 
-    def event_col(column: str) -> psycopg2.sql.Composable:
-        return psycopg2.sql.SQL(
-            "(SELECT e.{column} FROM {source} e WHERE e.job_id::text = {job_id}::text LIMIT 1)"
-        ).format(
-            column=psycopg2.sql.Identifier(column),
-            source=psycopg2.sql.Identifier(table),
-            job_id=col("job_id"),
-        )
-
     return psycopg2.sql.SQL(
         "({tl} IS NULL OR {rd} IS NULL OR {rd} > NOW() - make_interval(hours => {h}))"
     ).format(
-        tl=event_col("ticket_link"),
-        rd=event_col("ticket_resolve_datetime_gmt"),
+        tl=col("ticket_link"),
+        rd=col("ticket_resolve_datetime_gmt"),
         h=psycopg2.sql.Literal(TICKET_CLOSED_GRACE_HOURS),
     )
 

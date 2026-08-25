@@ -38,7 +38,10 @@ def fetch_known_issues(
                    ) sub
                    ORDER BY batch_id DESC
                    LIMIT %s"""
-            ).format(psycopg2.sql.Identifier(results_table), active=known_issue_active_sql(conn)),
+            ).format(
+                psycopg2.sql.Identifier(results_table),
+                active=known_issue_active_sql(conn, table=results_table),
+            ),
             (cutoff_batch_id, limit),
         )
         rows = cur.fetchall()
