@@ -13,7 +13,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.sql
-from utils import connect_db, load_config
+from utils import connect_db, known_issue_active_sql, load_config
 
 MATCH_THRESHOLD = 0.85
 LOOKBACK_HOURS = 4
@@ -27,8 +27,12 @@ def find_match(cur: Any, results_table: str, job: dict[str, Any]) -> int | None:
         psycopg2.sql.SQL(
             """SELECT id, root_cause_summary FROM {}
                WHERE root_cause_category = %s AND catalog_item = %s
-                 AND confidence = 'high' AND batch_id >= %s"""
-        ).format(psycopg2.sql.Identifier(results_table)),
+                 AND confidence = 'high' AND batch_id >= %s
+                 AND {active}"""
+        ).format(
+            psycopg2.sql.Identifier(results_table),
+            active=known_issue_active_sql(cur.connection, table=results_table),
+        ),
         (job.get("root_cause_category"), job.get("catalog_item"), cutoff_batch_id),
     )
     summary = job.get("root_cause_summary", "")
@@ -104,8 +108,8 @@ def store_report(
                     psycopg2.sql.SQL(
                         """INSERT INTO {}
                            (batch_id, job_id, status, root_cause_category, root_cause_summary,
-                            confidence, catalog_item, job_duration_seconds, ticket_link, is_open)
-                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            confidence, catalog_item, job_duration_seconds)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                            ON CONFLICT (batch_id, job_id) DO UPDATE SET status = EXCLUDED.status
                            RETURNING id"""
                     ).format(psycopg2.sql.Identifier(results_table)),
@@ -118,8 +122,6 @@ def store_report(
                         job.get("confidence"),
                         job.get("catalog_item"),
                         job.get("job_duration_seconds"),
-                        job.get("ticket_link"),
-                        job.get("is_open", False),
                     ),
                 )
                 row = cur.fetchone()

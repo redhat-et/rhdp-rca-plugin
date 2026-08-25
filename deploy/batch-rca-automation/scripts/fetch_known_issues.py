@@ -10,7 +10,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.sql
-from utils import connect_db, load_config
+from utils import connect_db, known_issue_active_sql, load_config
 
 
 def fetch_known_issues(
@@ -33,11 +33,15 @@ def fetch_known_issues(
                        WHERE confidence = 'high'
                          AND batch_id >= %s
                          AND status = 'analyzed'
+                         AND {active}
                        ORDER BY root_cause_category, catalog_item, batch_id DESC
                    ) sub
                    ORDER BY batch_id DESC
                    LIMIT %s"""
-            ).format(psycopg2.sql.Identifier(results_table)),
+            ).format(
+                psycopg2.sql.Identifier(results_table),
+                active=known_issue_active_sql(conn, table=results_table),
+            ),
             (cutoff_batch_id, limit),
         )
         rows = cur.fetchall()

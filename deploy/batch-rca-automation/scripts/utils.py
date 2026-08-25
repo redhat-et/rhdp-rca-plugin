@@ -8,6 +8,7 @@ from typing import Any
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.sql
 from dotenv import load_dotenv
 
 ALL_CONFIG_KEYS = {
@@ -19,6 +20,36 @@ ALL_CONFIG_KEYS = {
     "source_table": ("SOURCE_DB_TABLE", ""),
     "results_table": ("SOURCE_DB_RESULT_TABLE", ""),
 }
+
+# Grace period after a linked JIRA ticket is closed before a known-issue row
+# is excluded from matching. Distinct from the unrelated lookback_hours=4
+# recency windows used elsewhere in this pipeline.
+TICKET_CLOSED_GRACE_HOURS = 4
+
+_TICKET_COLUMNS = ("ticket_link", "ticket_resolve_datetime_gmt")
+
+# Per-table cache so the schema is only probed once per process, not once per query.
+_ticket_columns_present: dict[str, bool] = {}
+
+
+def _has_ticket_columns(conn: Any, table: str) -> bool:
+    if table not in _ticket_columns_present:
+        with conn.cursor(cursor_factory=psycopg2.extensions.cursor) as cur:
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns"
+                " WHERE table_name = %s AND column_name = ANY(%s)",
+                (table, list(_TICKET_COLUMNS)),
+            )
+            found = {row[0] for row in cur.fetchall()}
+        present = set(_TICKET_COLUMNS) <= found
+        if not present:
+            print(
+                f"[WARN] {table} is missing {', '.join(_TICKET_COLUMNS)}; "
+                "known-issue ticket filtering disabled, treating all known issues as active",
+                file=sys.stderr,
+            )
+        _ticket_columns_present[table] = present
+    return _ticket_columns_present[table]
 
 
 def load_config(required: tuple[str, ...] = ("name", "user", "password")) -> dict[str, Any]:
@@ -37,6 +68,45 @@ def load_config(required: tuple[str, ...] = ("name", "user", "password")) -> dic
         raise SystemExit(1)
 
     return config
+
+
+def known_issue_active_sql(
+    conn: Any,
+    alias: str = "",
+    *,
+    table: str,
+) -> psycopg2.sql.Composable:
+    """Boolean SQL fragment (no leading AND): TRUE unless the row's linked
+    ticket is closed and has been for TICKET_CLOSED_GRACE_HOURS+.
+
+    ticket_link and ticket_resolve_datetime_gmt live directly on the row
+    being filtered (the results table).
+
+    A row is excluded only when ticket_link is set and
+    ticket_resolve_datetime_gmt is old enough. Every other combination (no
+    ticket, or an unknown/recent resolve time) is active.
+
+    If the results table is missing ticket_link/ticket_resolve_datetime_gmt
+    (schema drift), ticket filtering is disabled and every row is treated as
+    active -- a warning is printed once per table.
+    """
+
+    def col(name: str) -> psycopg2.sql.Identifier:
+        return psycopg2.sql.Identifier(alias, name) if alias else psycopg2.sql.Identifier(name)
+
+    if not table:
+        raise ValueError("table is required for known_issue_active_sql")
+
+    if not _has_ticket_columns(conn, table):
+        return psycopg2.sql.SQL("TRUE")
+
+    return psycopg2.sql.SQL(
+        "({tl} IS NULL OR {rd} IS NULL OR {rd} > NOW() - make_interval(hours => {h}))"
+    ).format(
+        tl=col("ticket_link"),
+        rd=col("ticket_resolve_datetime_gmt"),
+        h=psycopg2.sql.Literal(TICKET_CLOSED_GRACE_HOURS),
+    )
 
 
 def connect_db(config: dict[str, Any], *, use_dict_cursor: bool = False) -> Any:
