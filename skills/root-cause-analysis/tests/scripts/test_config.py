@@ -159,3 +159,59 @@ def test_validate_splunk_no_auth():
     errors = config.validate_splunk()
     assert len(errors) == 1
     assert "SPLUNK_USERNAME/SPLUNK_PASSWORD or SPLUNK_TOKEN is required" in errors[0]
+
+
+# --- Config pgvector tests ---
+
+
+def test_config_from_env_loads_pgvector(monkeypatch, tmp_path):
+    """Test loading pgvector configuration from environment variables."""
+    monkeypatch.setenv("PGVECTOR_HOST", "127.0.0.1")
+    monkeypatch.setenv("PGVECTOR_PORT", "5433")
+    monkeypatch.setenv("PGVECTOR_DB_NAME", "rca_vectors")
+    monkeypatch.setenv("PGVECTOR_DB_USER", "rca_pgvector")
+    monkeypatch.setenv("PGVECTOR_DB_PASSWORD", "secret")
+    monkeypatch.setenv("PGVECTOR_TABLE", "custom_embeddings")
+
+    config = Config.from_env(base_dir=tmp_path)
+
+    assert config.pgvector_host == "127.0.0.1"
+    assert config.pgvector_port == 5433
+    assert config.pgvector_db_name == "rca_vectors"
+    assert config.pgvector_db_user == "rca_pgvector"
+    assert config.pgvector_db_password == "secret"
+    assert config.pgvector_table == "custom_embeddings"
+    assert config.has_pgvector() is True
+
+
+def test_config_pgvector_falls_back_to_source_db(monkeypatch, tmp_path):
+    """Test PGVECTOR_DB_* falls back to SOURCE_DB_* when unset."""
+    monkeypatch.setenv("PGVECTOR_HOST", "127.0.0.1")
+    monkeypatch.delenv("PGVECTOR_DB_NAME", raising=False)
+    monkeypatch.delenv("PGVECTOR_DB_USER", raising=False)
+    monkeypatch.delenv("PGVECTOR_DB_PASSWORD", raising=False)
+    monkeypatch.setenv("SOURCE_DB_NAME", "aap2-agents")
+    monkeypatch.setenv("SOURCE_DB_USER", "aap2-agent-ro")
+    monkeypatch.setenv("SOURCE_DB_PASSWORD", "source-secret")
+
+    config = Config.from_env(base_dir=tmp_path)
+
+    assert config.pgvector_db_name == "aap2-agents"
+    assert config.pgvector_db_user == "aap2-agent-ro"
+    assert config.pgvector_db_password == "source-secret"
+    assert config.has_pgvector() is True
+
+
+def test_has_pgvector_false_when_missing(monkeypatch, tmp_path):
+    """Test has_pgvector returns False when host is unset."""
+    monkeypatch.delenv("PGVECTOR_HOST", raising=False)
+    monkeypatch.delenv("PGVECTOR_DB_NAME", raising=False)
+    monkeypatch.delenv("PGVECTOR_DB_USER", raising=False)
+    monkeypatch.delenv("PGVECTOR_DB_PASSWORD", raising=False)
+    monkeypatch.delenv("SOURCE_DB_NAME", raising=False)
+    monkeypatch.delenv("SOURCE_DB_USER", raising=False)
+    monkeypatch.delenv("SOURCE_DB_PASSWORD", raising=False)
+
+    config = Config.from_env(base_dir=tmp_path)
+    assert config.has_pgvector() is False
+    assert config.pgvector_table == "rca_analysis_embeddings"

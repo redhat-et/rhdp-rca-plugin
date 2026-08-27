@@ -6,6 +6,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from config import load_settings_env
+
 # Placeholder pattern -- values that haven't been configured yet
 PLACEHOLDER_PATTERN = "<"
 
@@ -245,6 +247,80 @@ def check_splunk() -> dict:
         "name": "Splunk",
         "status": "ok",
         "message": f"host={host}, auth={auth_method}",
+    }
+
+
+def check_pgvector() -> dict:
+    """Check pgvector configuration (optional historical embedding store)."""
+    host = os.environ.get("PGVECTOR_HOST", "")
+    db_name = os.environ.get("PGVECTOR_DB_NAME", "") or os.environ.get("SOURCE_DB_NAME", "")
+    db_user = os.environ.get("PGVECTOR_DB_USER", "") or os.environ.get("SOURCE_DB_USER", "")
+    db_password = os.environ.get("PGVECTOR_DB_PASSWORD", "") or os.environ.get(
+        "SOURCE_DB_PASSWORD", ""
+    )
+
+    env_vars = [
+        {"name": "PGVECTOR_HOST", "prompt": "pgvector database host"},
+        {
+            "name": "PGVECTOR_PORT",
+            "prompt": "pgvector database port",
+            "optional": True,
+            "default": "5432",
+        },
+        {
+            "name": "PGVECTOR_DB_NAME",
+            "prompt": "pgvector database name (falls back to SOURCE_DB_NAME)",
+            "optional": True,
+        },
+        {
+            "name": "PGVECTOR_DB_USER",
+            "prompt": "pgvector database user (falls back to SOURCE_DB_USER)",
+            "optional": True,
+        },
+        {
+            "name": "PGVECTOR_DB_PASSWORD",
+            "prompt": "pgvector database password (falls back to SOURCE_DB_PASSWORD)",
+            "optional": True,
+        },
+        {
+            "name": "PGVECTOR_TABLE",
+            "prompt": "pgvector table name",
+            "optional": True,
+            "default": "rca_analysis_embeddings",
+        },
+    ]
+
+    if is_placeholder(host):
+        return {
+            "name": "pgvector",
+            "status": "missing",
+            "message": "Not configured. Optional: enables embedding completed RCAs for historical search. Set in .claude/settings.json",
+            "env_vars": env_vars,
+            "configurable": True,
+        }
+
+    if is_placeholder(db_name) or is_placeholder(db_user) or is_placeholder(db_password):
+        missing = []
+        if is_placeholder(db_name):
+            missing.append("PGVECTOR_DB_NAME (or SOURCE_DB_NAME)")
+        if is_placeholder(db_user):
+            missing.append("PGVECTOR_DB_USER (or SOURCE_DB_USER)")
+        if is_placeholder(db_password):
+            missing.append("PGVECTOR_DB_PASSWORD (or SOURCE_DB_PASSWORD)")
+        return {
+            "name": "pgvector",
+            "status": "missing",
+            "message": f"PGVECTOR_HOST set but auth incomplete: {', '.join(missing)}",
+            "env_vars": env_vars,
+            "configurable": True,
+        }
+
+    table = os.environ.get("PGVECTOR_TABLE", "rca_analysis_embeddings")
+    port = os.environ.get("PGVECTOR_PORT", "5432")
+    return {
+        "name": "pgvector",
+        "status": "ok",
+        "message": f"host={host}:{port}, db={db_name}, table={table}",
     }
 
 
@@ -586,6 +662,8 @@ def run_checks(base_dir: Path, repo_root: Path | None = None) -> list[dict]:
     if repo_root is None:
         repo_root = base_dir.parent.parent
 
+    load_settings_env(repo_root)
+
     return [
         check_python_venv(base_dir),
         check_job_logs_dir(),
@@ -594,6 +672,7 @@ def run_checks(base_dir: Path, repo_root: Path | None = None) -> list[dict]:
         check_splunk(),
         check_github(),
         check_github_mcp(repo_root),
+        check_pgvector(),
         check_mlflow(),
         check_mlflow_server(),
         check_mlflow_hooks(repo_root),
