@@ -46,7 +46,8 @@ Add the following environment variables to your Claude Code settings file:
     "SPLUNK_INDEX": "your_splunk_index",
     "SPLUNK_OCP_APP_INDEX": "your_ocp_app_index",
     "SPLUNK_OCP_INFRA_INDEX": "your_ocp_infra_index",
-    "SPLUNK_VERIFY_SSL": "false"
+    "SPLUNK_VERIFY_SSL": "false",
+    "KNOWN_FAILED_YAML_URL": "https://raw.githubusercontent.com/<owner>/<repo>/<branch>/known_failed.yaml"
   }
 }
 ```
@@ -60,6 +61,12 @@ Update the values:
 - `SPLUNK_USERNAME` / `SPLUNK_PASSWORD` - Your Splunk credentials
 - `SPLUNK_INDEX` - Default index for AAP logs
 - `SPLUNK_OCP_APP_INDEX` / `SPLUNK_OCP_INFRA_INDEX` - OCP log indices
+- `KNOWN_FAILED_YAML_URL` / `KNOWN_FAILED_YAML` - **Optional** source of known failure patterns for error classification. The whole classification step is skipped gracefully if neither is set (the rest of the pipeline runs unchanged). You do **not** need a GitHub token — pick whichever source fits your access:
+  - **Local file** (no network): set `KNOWN_FAILED_YAML` to a path, or pass `--known-failures-file <path>`.
+  - **Plain raw URL over HTTP/curl** (no credentials): set `KNOWN_FAILED_YAML_URL` to a raw URL such as `https://raw.githubusercontent.com/<owner>/<repo>/<branch>/known_failed.yaml`, or pass `--known-failures-url <url>`. This is the recommended option for users who cannot use a GitHub token.
+  - **GitHub contents API** (`https://api.github.com/repos/<owner>/<repo>/contents/<path>/known_failed.yaml`): works with or without a token — the raw `Accept` header is always sent so unauthenticated requests still return file content. A `GITHUB_TOKEN`, if set, is used only to reach **private** repositories.
+
+  Fetched URLs are cached locally (keyed per URL) so a later fetch failure never falls back to patterns from a different source. CLI flags override the env vars. Do **not** commit real/private URLs — the examples above are placeholders.
 
 ### 3. Configure SSH for auto-fetch (optional)
 
@@ -157,6 +164,22 @@ Alternatively, specify the log file directly:
 .venv/bin/python scripts/cli.py analyze --job-log /path/to/job_1234567.json.gz
 ```
 
+### Classify Against Known Failure Patterns (optional)
+
+Provide a `known_failed.yaml` from a local file or a plain URL — no GitHub token required. If neither is supplied, classification is skipped and the rest of the pipeline runs normally.
+
+```bash
+# From a local file
+.venv/bin/python scripts/cli.py analyze --job-id 1234567 \
+  --known-failures-file /path/to/known_failed.yaml
+
+# From a raw URL over plain HTTP/curl (no credentials)
+.venv/bin/python scripts/cli.py analyze --job-id 1234567 \
+  --known-failures-url https://raw.githubusercontent.com/<owner>/<repo>/<branch>/known_failed.yaml
+```
+
+These flags override the `KNOWN_FAILED_YAML` / `KNOWN_FAILED_YAML_URL` env vars (see the configuration section above). The example URL is a placeholder — substitute your own repository.
+
 ### Other Commands
 
 ```bash
@@ -222,7 +245,7 @@ All steps are executed automatically by the `cli.py analyze` command:
 
 ### Step 5: Analyze and Generate Summary (Claude)
 
-**Input files**: Read outputs from steps 1-4 (`step1_job_context.json`, `step3_correlation.json`, `step4_github_fetch_history.json`, and if needed, `step2_splunk_logs.json`).
+**Input files**: Read outputs from steps 1-4 (`step1_job_context.json`, `step3_correlation.json`, `step4_github_fetch_history.json`, `classification.json`, and if needed, `step2_splunk_logs.json`).
 
 **Analysis Guidelines**:
 - **Configuration Analysis**: Variable precedence (role defaults → common.yaml → platform/account.yaml → platform/catalog/env.yaml), check for conflicts, missing variables, secrets references
@@ -259,6 +282,7 @@ Analysis results are saved to `.analysis/<job-id>/`:
 | `step2_splunk_logs.json` | Correlated Splunk pod logs | Python |
 | `step3_correlation.json` | Unified timeline with correlation proof | Python |
 | `step4_github_fetch_history.json` | GitHub fetch results (configs and workload code) | Python (Claude updates for MCP verification) |
+| `classification.json` | Known failure pattern matches | Python |
 | `step5_analysis_summary.json` | Root cause summary with recommendations | Claude |
 
 ## Correlation Methods
