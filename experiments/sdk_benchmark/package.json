@@ -1,0 +1,19 @@
+{
+  "name": "rhdp-rca-sdk-benchmark",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Cross-SDK benchmark for the root-cause-analysis skill (Claude Agent SDK vs OpenCode vs Pi).",
+  "scripts": {
+    "smoke:opencode": "node benchmark/runners/opencode_runner.mjs < /dev/null",
+    "smoke:pi": "node benchmark/runners/pi_runner.mjs < /dev/null"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.75.3",
+    "@opencode-ai/sdk": "^1.15.5",
+    "opencode-ai": "^1.15.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
